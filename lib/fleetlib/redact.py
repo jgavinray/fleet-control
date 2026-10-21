@@ -82,13 +82,14 @@ _TYPE_WORDS = {
 }
 
 
-def _looks_like_code_or_placeholder(v: str) -> bool:
-    """True for values that name a secret rather than hold one."""
+def _looks_like_code_or_placeholder(v: str, env_assignment: bool = False) -> bool:
+    """True for values that name a secret rather than hold one. In a NAME=value assignment with no spaces
+    (shell, env file) the name is the signal, so type words such as true or none are values there."""
     if not v:
         return True
     if v.startswith(_NOT_A_VALUE_START):
         return True
-    if v.lower() in _TYPE_WORDS:
+    if not env_assignment and v.lower() in _TYPE_WORDS:
         return True
     if re.match(r"[A-Za-z_][\w.]*[(\[]", v):  # f(...), Optional[str], os.environ[...]
         return True
@@ -114,7 +115,7 @@ def _kv(m: "re.Match[str]") -> Optional[str]:
         q, inner = v[0], v[1:-1]
     else:
         q, inner = "", v
-    if _looks_like_code_or_placeholder(inner):
+    if _looks_like_code_or_placeholder(inner, env_assignment=re.search(r"[^\s\"'\\]=$", m.group(1)) is not None):
         return None
     return m.group(1) + q + marker("secret") + q
 
@@ -217,11 +218,11 @@ def _shell_ok(v: str, dash_ok: bool = False) -> bool:
     inner = _unquote(v)
     if not inner or "REDACTED" in inner:
         return False
-    if not v.startswith("'") and inner[0] in "$<":
-        return False
+    if not v.startswith("'") and (inner[0] == "<" or (inner[0] == "$" and not inner.startswith("$'"))):
+        return False  # $VAR, ${VAR}, $(cmd) and redirects are not values
     if not dash_ok and inner.startswith("-"):
-        return False
-    return inner.lower() not in _SKIP_VALUES
+        return False  # "--password --verbose": the next flag, not a value
+    return True
 
 
 def _value_rule(ok: "Callable[[str], bool]") -> "Callable[[re.Match[str]], Optional[str]]":
@@ -238,9 +239,13 @@ _SV = r"""\"[^\"\n]*\"|'[^'\n]*'|[^\s'\"`;&|<>()]+"""
 # the arguments between a tool name and its -p flag, inside one simple command
 _GAP = r"[^;&|\n()]{0,300}?"
 
+# The NAME is the signal: a password-like name masks the value whatever its shape (fake-value-xyz, abc-def,
+# correct-horse-battery). Bare PWD is the shell's working directory and is not matched.
 _ENV_PW = re.compile(
-    r"(?<![A-Za-z0-9$/])((?:(?:[A-Za-z0-9]{1,30}[_.\-]){0,6}(?-i:PW|PWD|PASS|PASSWD|PASSCODE)(?:[_.\-][A-Za-z0-9]{1,30}){0,4}"
-    r"|(?:[A-Za-z0-9]{1,30}[_.\-]){1,6}(?i:pw|pwd|pass|passwd|passcode))=)(" + _SV + ")"
+    r"(?<![A-Za-z0-9$/])((?:(?:[A-Za-z0-9]{1,30}[_.\-]){0,6}(?i:pass|passwd|passcode|pw)[0-9]{0,2}"
+    r"|(?:[A-Za-z0-9]{1,30}[_.\-]){1,6}(?i:pwd)[0-9]{0,2}"
+    r"|(?i:(?!(?:com|by|tres|sur|over|under)pass(?![A-Za-z]))[A-Za-z]{1,20}(?:pass|passwd|pwd|pw)))"
+    r"(?:[_.\-][A-Za-z0-9]{1,30}){0,4}=)(" + _SV + ")"
 )
 _PASS_FLAG = re.compile(r"(?i)(?<![A-Za-z0-9_\-])(--(?:pass|pw|pwd)(?:=|[ \t]+))(" + _SV + ")")
 # sshpass -p VALUE, after its own flags only, so "sshpass -e ssh -p 22 host" keeps its port
@@ -394,7 +399,7 @@ RULES: list[Rule] = [
     Rule("bearer", "bearer", _BEARER, _bearer),
     Rule("key-value", "secret", _KV, _kv),
     Rule("secret-flag", "secret", _FLAG, _flag),
-    Rule("env-password", "password", _ENV_PW, _value_rule(_strong)),
+    Rule("env-password", "password", _ENV_PW, _value_rule(_shell_dash)),
     Rule("pass-flag", "password", _PASS_FLAG, _value_rule(_shell)),
     Rule("sshpass", "password", _SSHPASS, _value_rule(_shell_dash)),
     Rule("mysql-password", "password", _MYSQL, _value_rule(_shell)),

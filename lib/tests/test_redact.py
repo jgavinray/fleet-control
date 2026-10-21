@@ -219,6 +219,10 @@ class Forms(unittest.TestCase):
         self.assertEqual(redact(text)[1], 4)
 
 
+def _unq(v):
+    return v[1:-1] if v[:1] in "'\"" else v
+
+
 class PasswordForms(unittest.TestCase):
     """Passwords on command lines and in prose: only the value goes, the command keeps its shape."""
 
@@ -254,6 +258,26 @@ class PasswordForms(unittest.TestCase):
             self.assertEqual(n, 1, text)
             self.assertEqual(leftovers(out), [], text)
             self.assertEqual(redact(out), (out, 0), text)
+
+    def test_a_password_like_name_masks_the_value_whatever_its_shape(self):
+        for name in ("ZB_PW", "zb_pw", "DB_PWD", "SVC_PASS", "MYSQL_PASSWD", "DBPASS", "pass", "API_TOKEN", "CLIENT_SECRET", "MY_API_KEY"):
+            for value in ("fake-value-xyz", "fake_value_xyz", "abc-def", "correct-horse-battery", "fakevaluexyz",
+                          "Fake-Value-9", "hunter2", "true", "'fake value xyz'", '"fake-value xyz"'):
+                text = f"{name}={value} ./run.sh"
+                out, n = redact(text)
+                self.assertEqual(n, 1, text)
+                self.assertNotIn(_unq(value), out, text)
+                self.assertTrue(out.endswith(" ./run.sh"), text)
+        for flag in ("--password", "--pass", "--db-password", "--pw"):
+            for value in ("fake-value-xyz", "fake_value_xyz", "correct-horse-battery", "yes"):
+                out, n = redact(f"tool {flag} {value} run")
+                self.assertEqual(n, 1, flag + " " + value)
+                self.assertNotIn(value, out)
+
+    def test_only_variable_references_are_left(self):
+        for t in ("ZB_PW=$ZB_PW ./run.sh", "ZB_PW=${ZB_PW} ./run.sh", 'ZB_PW="$ZB_PW" ./run.sh', "DB_PASS=$(cat /run/pw) run",
+                  "tool --password ${DB_PW} run", "PWD=abc-def ls", "bypass=north-east ./go", "compass=north ./go"):
+            self.assertEqual(redact(t), (t, 0), t)
 
     def test_two_secrets_in_one_command(self):
         out, n = redact("sshpass -p fakeSshPw1 ssh h 'mysql -u r -pfakeMyPw1 db' && ZB_PW=fake-value-123 ./go")
