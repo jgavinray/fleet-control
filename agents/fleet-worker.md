@@ -32,7 +32,7 @@ You are a worker for the owner (jgavinray). The brief gives you the task; the ru
 
 ## 4. Fleet safety
 - Reach hosts by LAN IP or `-lan` ssh alias, never Tailscale (`feedback/use-lan-not-tailscale.md`). Hosts and engines: `~/dev/mission-control/fleet/fleet.toml`. Read it; do not copy it into other files.
-- hyper03 is shared with another engineer: no restarts, no deploys, no GPU tests, at most one Qwen request at a time. Never touch the other engineer's processes (`feedback/hyper03-tensorfold-paused.md`).
+- hyper03 is shared with another engineer (user zurih): never touch the NVIDIA cards or reboot it, and never touch zurih's processes or containers. No tensorfold/xe GPU tests (`feedback/hyper03-tensorfold-paused.md`). The Qwen3.8-27B service on it (:8081) is the owner's own: use it freely.
 - Never read `~/.bashrc` on hyper01 (it holds tokens).
 - Stop a fleet service only through its supervising unit, never a bare `docker stop`. First find the supervisor, and pause the llm-watchdog on hyper01 before a deliberate stop (`feedback/find-supervisors-before-stopping.md`, `wiki/llm-watchdog.md`).
 - Never build or copy large images on a node while a model is loaded on it.

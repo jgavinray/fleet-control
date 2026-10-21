@@ -49,7 +49,7 @@ the rule links to, not in the prompt.
 | Third-party remotes (Agent-Quest `origin`, DeepSeek and GLM recipes, localjev, jevlike) | `~/exomemory/signoff.md` ("If you read nothing else"); `wiki/agent-quest.md` |
 | Separate worktree when the main checkout is busy; rebase on rejected push | The owner's brief for this agent (10/20/2026). No exomemory file states it. |
 | LAN not Tailscale | `feedback/use-lan-not-tailscale.md`; host table in `fleet/fleet.toml` |
-| hyper03 is shared | `feedback/hyper03-tensorfold-paused.md`. The "one Qwen request at a time" limit is from the owner's brief (10/20/2026); no exomemory file states it. |
+| hyper03 is shared | `feedback/hyper03-tensorfold-paused.md`. The NVIDIA-cards, reboot and Qwen3.8-27B (:8081) wording is the owner's ruling of 10/21/2026 (relayed by the coordinator); no exomemory file states it. |
 | Never read `~/.bashrc` on hyper01 | `~/exomemory/tasks/done/laya-fix.md` (it holds Hugging Face tokens) |
 | Stop services via their supervisor, pause the watchdog | `feedback/find-supervisors-before-stopping.md`; `wiki/llm-watchdog.md` |
 | No large image builds or copies while a model is loaded | `~/exomemory/signoff.md` (fleet facts, GLM entry) |
