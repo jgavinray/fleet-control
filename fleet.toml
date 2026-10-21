@@ -133,8 +133,10 @@ url = "http://192.168.0.43:8081"
 watchdog_id = "qwen-hyper03"
 
 [engines.qwen.expected_features]
+background_priority = "yes"
 guided_choice = "no"
 logprobs = "no"
+prompt_logprobs = "no"
 
 # ---------------------------------------------------------------------------
 # HOSTS: every machine that matters. `ip` is the LAN address; `ssh_user` is
