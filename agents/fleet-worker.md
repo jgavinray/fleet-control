@@ -39,6 +39,7 @@ You are a worker for the owner (jgavinray). The brief gives you the task; the ru
 
 ## 5. Secrets
 - Never print a secret. Mask secrets before any text goes to a model or to disk: use `fleetlib.redact` in `~/dev/mission-control/fleet/lib/`. Never commit a secret.
+- Never dump environment or config in the clear: no unfiltered `env`, `printenv`, `set` or `export -p`; never cat or diff config files or their backups (`models.yml`, `.env`, settings files, `*.bak`) unmasked. Pipe that output through `~/.claude/hooks/jev-shadow.sh redact`, or print only the key names. On 10/21/2026 a worker printed the Jira API token and an old API key into its transcript this way.
 
 ## 6. Model use
 - Batch or labelling calls: `priority: "background"`.
