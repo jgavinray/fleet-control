@@ -1,0 +1,218 @@
+# fleet.toml: the single source of truth for the owner's machines and the
+# model engines that run on them. `fleet-check` reads this file.
+#
+# Rules for this file:
+#   - Keys are sorted alphabetically inside every table, tables are sorted
+#     by name, and the top-level sections are sorted too (engines, then
+#     hosts), so a diff shows only real changes. No timestamps.
+#   - No secrets. Base URLs only.
+#   - Use LAN addresses, never Tailscale.
+#   - Facts here come from ~/exomemory/wiki (llm-watchdog, glm53-tensorfold-
+#     upgrade, lfm2d-assessment, fleet-hosts-plaquedarchon, gemma-tested),
+#     the warm-start block in ~/exomemory/signoff.md, and
+#     ~/.omp/agent/models.yml. Each engine URL was checked with one request
+#     on 10/20/2026.
+
+# ---------------------------------------------------------------------------
+# ENGINES: every model service fleet-check tests.
+#
+#   url               base URL, no trailing slash
+#   model             the id the engine must report
+#   host              a key in [hosts.*]
+#   kind              tensorfold | lfm2d | laya | jev-glm (picks the checks)
+#   supervisor_scope  "user" or "system" (systemd), or "external" if it is
+#                     not ours to manage
+#   supervisor_unit   the systemd unit that keeps it running
+#   watchdog_id       the id in hyper01's llm-watchdog services.json, or ""
+#   shared            true: skip the sanity question and probes when the
+#                     engine says it is busy (other people use it)
+#   expected_features what we believe the engine supports ("yes" or "no").
+#                     fleet-check measures each one and flags any difference.
+#                     A feature left out is measured but not judged.
+# ---------------------------------------------------------------------------
+
+# DeepSeek V4.1 Flash on spark + spark2. Rejects guided_choice and JSON
+# schema with 400. Chat logprobs refused. Never restart via dsv41-exl3.service.
+[engines.deepseek]
+host = "spark"
+kind = "tensorfold"
+model = "DeepSeek-V4.1-Flash-1017"
+notes = "Rejects guided_choice and JSON schema with 400. NEVER use the old dsv41-exl3.service."
+supervisor_scope = "user"
+supervisor_unit = "dsv41-boot-start.service"
+url = "http://192.168.0.33:8888"
+watchdog_id = "deepseek-head"
+
+[engines.deepseek.expected_features]
+background_priority = "yes"
+guided_choice = "no"
+logprobs = "no"
+prompt_logprobs = "no"
+
+# GLM 5.3 Flash on spark3 + spark4, TensorFold 0.6.0. guided_choice works only
+# with thinking off. Chat logprobs refused. prompt_logprobs silently ignored.
+[engines.glm]
+host = "spark3"
+kind = "tensorfold"
+model = "GLM-5.3-Flash-EXL3"
+notes = "TensorFold 0.6.0. guided_choice needs thinking off. logprobs refused (400); prompt_logprobs ignored (200, no field)."
+supervisor_scope = "system"
+supervisor_unit = "glm53-tf.service"
+url = "http://192.168.0.213:8888"
+watchdog_id = "glm-head"
+
+[engines.glm.expected_features]
+background_priority = "yes"
+guided_choice = "yes"
+logprobs = "no"
+prompt_logprobs = "no"
+
+# Jev-compatible decision service that asks GLM several times and counts the
+# answers. Built on 10/20/2026; the supervisor is hyper01's user unit.
+[engines.jev-glm]
+host = "hyper01"
+kind = "jev-glm"
+model = "jev-glm-0.1"
+notes = "POST /v1/systemone. Needs GLM to be up (GET /ready)."
+supervisor_scope = "user"
+supervisor_unit = "jev-glm.service"
+url = "http://192.168.0.44:8102"
+watchdog_id = ""
+
+# laya: the Tesla P4 decision classifier. Answers /v1/systemone.
+[engines.laya]
+host = "hyper01"
+kind = "laya"
+model = "laya-rl-agent"
+notes = "English checkpoint on the P4. Near chance on the owner's jobs; check that it is up, not that it is good."
+supervisor_scope = "system"
+supervisor_unit = "laya.service"
+url = "http://192.168.0.44:8001"
+watchdog_id = "laya"
+
+# lfm2d 8B opinion engine on hyper01's T4. The exporter on :9170 is its
+# Prometheus bridge, checked together with it. The engine has no /health, so
+# GET /v1/models is the health check.
+[engines.lfm2d-8b]
+exporter_url = "http://192.168.0.44:9170"
+health_path = "/v1/models"
+host = "hyper01"
+kind = "lfm2d"
+model = "LFM2.5-8B-A1B-Q4_K_M"
+notes = "Opinion engine. Cheap read: GET /v1/opinion/specs must list at least one spec."
+read = "specs"
+supervisor_scope = "user"
+supervisor_unit = "lfm2d-system1-t4.service"
+url = "http://192.168.0.44:8099"
+watchdog_id = "lfm2d-exporter"
+
+# lfm2d encoder heads (embedder, router, PII/credentials) on zapp's CPU.
+[engines.lfm2d-encoders]
+health_path = "/v1/models"
+host = "zapp"
+kind = "lfm2d"
+model = "LFM2.5-Embedding-350M"
+notes = "Cheap read: POST /v1/spans/credentials with a tiny input. A 14 KB input once OOM-killed it."
+read = "spans"
+supervisor_scope = "user"
+supervisor_unit = "lfm2d-encoder.service"
+url = "http://192.168.0.32:8088"
+watchdog_id = "lfm2d-zapp"
+
+# Qwen3.8 27B on hyper03 (Intel XPU). One request at a time, shared with the
+# owner's ghostwriter and another engineer. Check-only: never ssh, never restart.
+[engines.qwen]
+host = "hyper03"
+kind = "tensorfold"
+model = "Qwen3.8-27B-MLX-4bit"
+notes = "Serves one request at a time. guided_choice fails with: libtfgrammar.so is required. Skipped when busy."
+shared = true
+supervisor_scope = "external"
+supervisor_unit = ""
+url = "http://192.168.0.43:8081"
+watchdog_id = "qwen-hyper03"
+
+[engines.qwen.expected_features]
+guided_choice = "no"
+logprobs = "no"
+
+# ---------------------------------------------------------------------------
+# HOSTS: every machine that matters. `ip` is the LAN address; `ssh_user` is
+# the account the owner's key logs in as. `shared = true` means someone else
+# also uses the machine, so nothing here may restart or load it.
+# ---------------------------------------------------------------------------
+
+# Always-on hub. Runs the watchdog, ai-telemetry, Agent Quest, the lfm2d 8B
+# (Tesla T4), laya (Tesla P4) and jev-glm.
+[hosts.hyper01]
+ip = "192.168.0.44"
+notes = "Always-on hub. Do not read ~/.bashrc here. Watchdog: llm-watchdog.service."
+role = "hub"
+ssh_user = "jgavinray"
+
+# SHARED with another engineer (user zurih). Runs the Qwen engine, which the
+# owner's ghostwriter uses. No restarts, no GPU tests, no ssh recovery.
+[hosts.hyper03]
+ip = "192.168.0.43"
+notes = "SHARED with another engineer (user zurih): no restarts, no GPU tests. Check-only."
+role = "shared-gpu"
+shared = true
+ssh_user = "jgavinray"
+
+# A second Mac (M2, 24 GB) on the 192.168.2.x subnet.
+[hosts.plaquedarchon]
+ip = "192.168.2.208"
+notes = "Mac M2, 24 GB. Role not recorded: ask the owner before running GPU or long jobs. No engines."
+role = "workstation"
+ssh_user = "jgavinray"
+
+# DGX Spark that is the DeepSeek head (rank 0). spark2 is the worker behind it.
+[hosts.spark]
+ip = "192.168.0.33"
+notes = "DeepSeek head (rank 0). Supervisor is the USER unit dsv41-boot-start.service. Never touch dsv41-exl3.service."
+role = "engine-head"
+ssh_user = "jgavinray"
+
+# DeepSeek worker (rank 1). Only reachable over the private link through spark.
+[hosts.spark2]
+behind = "spark"
+ip = "192.168.100.11"
+notes = "DeepSeek worker (rank 1). Reached through spark over the private cable link, no LAN address."
+role = "engine-worker"
+ssh_user = "jgavinray"
+
+# DGX Spark that is the GLM head (rank 0). spark4 is the worker behind it.
+[hosts.spark3]
+ip = "192.168.0.213"
+notes = "GLM head (rank 0). Never build or copy images while GLM is loaded; memory is near full."
+role = "engine-head"
+ssh_user = "jgavinray"
+
+# GLM worker (rank 1). Has a LAN address, used for ssh only.
+[hosts.spark4]
+behind = "spark3"
+ip = "192.168.0.206"
+notes = "GLM worker (rank 1). The engine is served from spark3."
+role = "engine-worker"
+ssh_user = "jgavinray"
+
+# The owner's Mac (this one). Runs the runner, the exomemory store, and fleet-check.
+[hosts.wabbajack]
+ip = "127.0.0.1"
+notes = "Owner's Mac. Where fleet-check, the runner and exomemory live."
+role = "workstation"
+ssh_user = "jgavinray"
+
+# CPU box that serves the lfm2d encoder heads (embedder, router, PII).
+[hosts.zapp]
+ip = "192.168.0.32"
+notes = "lfm2d encoders on CPU, 7.6 GB RAM. The daemon runs under the user manager of the local account zoidberg. Keep requests to 2 KB or less."
+role = "cpu-encoders"
+ssh_user = "jgavinray"
+
+# A Mac set up as a full omp workstation on 9/25/2026.
+[hosts.zoidberg]
+ip = "192.168.0.57"
+notes = "Mac workstation mirroring wabbajack. No engines."
+role = "workstation"
+ssh_user = "jgavinray"
