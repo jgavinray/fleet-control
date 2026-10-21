@@ -48,6 +48,19 @@ POSITIVE = {
     "bearer": ("curl -H 'Authorization: Bearer abc123def456ghi789' https://x", "bearer", "abc123def456ghi789"),
     "key-value": ("export DB_PASSWORD=hunter2 and go", "secret", "hunter2"),
     "secret-flag": ("mysql -u root --password hunter2 db", "secret", "hunter2"),
+    "env-password": ("ZB_PW=fake-value-123 ./run.sh", "password", "fake-value-123"),
+    "pass-flag": ("tool --pass fakeFlag99 https://x", "password", "fakeFlag99"),
+    "sshpass": ("sshpass -p fakeSshPw1 ssh -p 22 root@host uptime", "password", "fakeSshPw1"),
+    "mysql-password": ("mysql -u root -pfakeMyPw1 db", "password", "fakeMyPw1"),
+    "tool-password": ("redis-cli -h h -a fakeRedis1 ping", "password", "fakeRedis1"),
+    "curl-user": ("curl -u admin:fakeCurl1 https://x", "password", "fakeCurl1"),
+    "prose-pw-kv": ("the old pw: fakeProse9a is gone", "password", "fakeProse9a"),
+    "prose-is": ("the password is fakeProse1 ok", "password", "fakeProse1"),
+    "prose-set-to": ("password changed to fakeProse6x", "password", "fakeProse6x"),
+    "prose-login-sep": ("log in as admin / fakeProse2 on the box", "password", "fakeProse2"),
+    "prose-login-pw": ("log in as admin with password fakepw", "password", "fakepw"),
+    "prose-user-pw": ("user admin password fakeProse3", "password", "fakeProse3"),
+    "prose-creds": ("credentials: admin:fakeProse5", "password", "fakeProse5"),
     "email": ("mail alice.smith@example.com today", "email", "alice.smith@example.com"),
     "hex-run": (f"sha256 {_hex}", "hex", _hex),
     "base64-run": (f"blob {_b64} end", "base64", _b64),
@@ -70,6 +83,19 @@ NEGATIVE = {
     "bearer": "the bearer of good news; Authorization: Bearer $TOKEN",
     "key-value": "max_tokens: 16, tokens_in = 0, def login(password: str), and if password == 'x'",
     "secret-flag": "docker login --password-stdin < file; run --max-tokens 100",
+    "env-password": "cd \"$PWD\" && PWD=/home/me/dev ls; export PWD_FILE=/run/pw; compass=north ./go; PASS=$X",
+    "pass-flag": "tool --pass-through foo; tool --pass \"$PW\" run; tool --pw -v",
+    "sshpass": "sshpass -e ssh -p 22 host uptime; sshpass -f /root/pwfile ssh host",
+    "mysql-password": "mysql -u root -p; mysql -u root -p -e 'select 1'; mysql -P 3306 -h db < dump.sql; ssh -p 22 host; grep -p x f",
+    "tool-password": "docker login registry.example.com; docker run -p 8080:80 nginx; redis-cli -h h ping; openssl enc -pass env:PW",
+    "curl-user": "curl -u admin https://x; curl -d x -H 'a: b' https://y",
+    "prose-pw-kv": "pass: 12 tests ran; the pw is hard to say",
+    "prose-is": "the password is required; the password is stored hashed; the password prompt",
+    "prose-set-to": "the password was set to expire; password reset to default",
+    "prose-login-sep": "log in as admin / and check the page; logged in as bob, then left",
+    "prose-login-pw": "log in as admin with password required",
+    "prose-user-pw": "user admin password policy applies; account owner with pw rules",
+    "prose-creds": "credentials: see the vault; creds are stored in the vault",
     "email": "git clone git@github.com:owner/repo.git; send me an email",
     "hex-run": "md5 d41d8cd98f00b204e9800998ecf8427e is 32 characters",
     "base64-run": "see /Users/someone/projects/a-long-name/src/module/file.py and averyveryverylongplainwordwithoutdigits",
@@ -84,6 +110,17 @@ PROSE = [
     "Meeting at 3pm on 10/20/2026 with the infra team about the GLM-5.3-Flash-EXL3 rollout and DeepSeek-V4.1.",
 ]
 COMMANDS = [
+    "git status",
+    "ssh -p 22 host",
+    "scp -P 2222 f.txt host:/tmp",
+    "grep -p foo file.txt",
+    "find . -name '*.log' -print",
+    "mysqldump db | gzip | find /b -print",
+    "echo the password prompt appears first",
+    "git commit -m 'fix: password is stored hashed'",
+    "export PASSWORD=$(cat /run/secrets/pw)",
+    "tool --password-stdin registry.example.com && tool --token-file /run/tok run",
+    "docker run -p 8080:80 nginx",
     "ls -la /Users/jgavinray/dev/mission-control/fleet/lib",
     "git log --oneline -n 20 && git status --short",
     "git push -u origin fleetlib",
@@ -180,6 +217,53 @@ class Forms(unittest.TestCase):
         out, c = redact_counts(text)
         self.assertEqual(dict(c), {"github-token": 2, "email": 1, "secret": 1})
         self.assertEqual(redact(text)[1], 4)
+
+
+class PasswordForms(unittest.TestCase):
+    """Passwords on command lines and in prose: only the value goes, the command keeps its shape."""
+
+    CASES = [
+        ("ZB_PW=fake-value-123 ./run.sh", "ZB_PW=[REDACTED:password] ./run.sh"),
+        ("export PASS=fakePass9x ./deploy", "export PASS=[REDACTED:password] ./deploy"),
+        ("SVC_DB_PW=zzfake77 curl http://x", "SVC_DB_PW=[REDACTED:password] curl http://x"),
+        ("DB_PWD='my fake pass 1' mysql", "DB_PWD='[REDACTED:password]' mysql"),
+        ("zb_pw=fake-lower-77 ./run.sh", "zb_pw=[REDACTED:password] ./run.sh"),
+        ("sshpass -p 'fake ssh pw' ssh host", "sshpass -p '[REDACTED:password]' ssh host"),
+        ("sshpass -v -p fakeSshPw2 scp f host:/tmp", "sshpass -v -p [REDACTED:password] scp f host:/tmp"),
+        ("tool --pw fakeFlag98 --other", "tool --pw [REDACTED:password] --other"),
+        ("tool --db-password fakeFlag98 --other", "tool --db-password [REDACTED:secret] --other"),
+        ("mysql -u root -p fakeMyPw2 db", "mysql -u root -p [REDACTED:password] db"),
+        ("mysql -u root -p'fake my pw' db", "mysql -u root -p'[REDACTED:password]' db"),
+        ("mysqldump -h h -u u -pfakeDump1 db > out.sql", "mysqldump -h h -u u -p[REDACTED:password] db > out.sql"),
+        ("ssh -p 22 host 'mysqladmin -u r -pfakeAdm1 status'", "ssh -p 22 host 'mysqladmin -u r -p[REDACTED:password] status'"),
+        ("docker login -u me -p fakeDock1 registry.example.com", "docker login -u me -p [REDACTED:password] registry.example.com"),
+        ("ldapsearch -x -D cn=admin -w fakeLdap1 -b dc=x", "ldapsearch -x -D cn=admin -w [REDACTED:password] -b dc=x"),
+        ("openssl enc -aes-256-cbc -pass pass:fakeSsl1 -in f", "openssl enc -aes-256-cbc -pass pass:[REDACTED:password] -in f"),
+        ("curl --user 'admin:fakeCurl2' https://x", "curl --user 'admin:[REDACTED:password]' https://x"),
+        ("curl -d '{\"password\": \"fakeJson77\"}' https://x", "curl -d '{\"password\": \"[REDACTED:secret]\"}' https://x"),
+        ("PASSCODE=fakeCode88 run", "PASSCODE=[REDACTED:secret] run"),
+        ("echo login: admin pw: fakeProse4", "echo login: admin pw: [REDACTED:password]"),
+        ("echo user admin password fakeProse3", "echo user admin password [REDACTED:password]"),
+        ("log in as admin / fakeProse2 on the box", "log in as admin / [REDACTED:password] on the box"),
+    ]
+
+    def test_only_the_value_is_masked(self):
+        for text, want in self.CASES:
+            out, n = redact(text)
+            self.assertEqual(out, want, text)
+            self.assertEqual(n, 1, text)
+            self.assertEqual(leftovers(out), [], text)
+            self.assertEqual(redact(out), (out, 0), text)
+
+    def test_two_secrets_in_one_command(self):
+        out, n = redact("sshpass -p fakeSshPw1 ssh h 'mysql -u r -pfakeMyPw1 db' && ZB_PW=fake-value-123 ./go")
+        self.assertEqual(n, 3)
+        self.assertEqual(out.count("[REDACTED:password]"), 3)
+
+    def test_a_port_is_not_a_password(self):
+        for t in ("ssh -p 22 host", "scp -P 2222 f host:/tmp", "sshpass -e ssh -p 22 host", "grep -p x f",
+                  "mysql -P 3306 -h db -u root", "mysql -u root -p", "mysql -u root -p -e 'select 1'"):
+            self.assertEqual(redact(t), (t, 0), t)
 
 
 class NoFalsePositives(unittest.TestCase):

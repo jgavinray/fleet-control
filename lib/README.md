@@ -50,6 +50,19 @@ prints it):
 | `bearer` | `bearer` | `Bearer <token>` (not `Bearer $VAR`, not the word in prose) |
 | `key-value` | `secret` | the value after `password`, `passwd`, `passphrase`, `secret`, `api_key`, `access_key`, `private_key` or `token` in `k=v`, `k: v`, JSON (`"k": "v"`), YAML, env files and JSON-escaped log lines |
 | `secret-flag` | `secret` | the value in `--password hunter2`, `--token abc` |
+| `env-password` | `password` | the value of env assignments with short password names: `ZB_PW=x`, `PASS=x`, `DB_PASSWD=x`, `svc_pwd=x` (quoted values with spaces too) |
+| `pass-flag` | `password` | `--pass X`, `--pw X`, `--pwd X` |
+| `sshpass` | `password` | `sshpass -p X` (not `sshpass -e ssh -p 22`, not `-f file`) |
+| `mysql-password` | `password` | `-pX` and `-p X` after `mysql`, `mysqldump`, `mysqladmin`, `mariadb` and the other mysql tools (a bare `-p` that prompts stays) |
+| `tool-password` | `password` | `docker login -p X`, `redis-cli -a X`, `ldapsearch -w X`, `openssl ... -pass pass:X` |
+| `curl-user` | `password` | the password in `curl -u user:pass` / `--user user:pass` |
+| `prose-pw-kv` | `password` | `pw: X`, `pass=X` in prose (needs a digit, symbol or mixed case) |
+| `prose-is` | `password` | `the password is X`, `password was X` (also a plain word) |
+| `prose-set-to` | `password` | `password changed to X`, `password -> X` |
+| `prose-login-sep` | `password` | `log in as USER / X`, `log in as USER: X` |
+| `prose-login-pw` | `password` | `log in as USER with password X` |
+| `prose-user-pw` | `password` | `user USER password X`, `login: USER pw: X` |
+| `prose-creds` | `password` | `credentials: USER:X` |
 | `email` | `email` | email addresses (not `git@github.com:owner/repo`) |
 | `hex-run` | `hex` | hex runs over 32 characters (this includes full git SHAs) |
 | `base64-run` | `base64` | base64 runs over 32 characters that mix letters and digits (file paths are left alone) |
@@ -58,7 +71,9 @@ prints it):
 
 It leaves alone: values that are variables or code (`$TOKEN`, `${X}`,
 `{{ x }}`, `os.environ[...]`, `Optional[str]`), `max_tokens` and `tokenizer`,
-type words (`password: str`), `password == "x"`, `git@github.com:...`
+type words (`password: str`), `password == "x"`, `--password-stdin` and
+`--token-file`, `ssh -p 22` and `scp -P` (ports; `-p` is a password only after
+the tools in the table), `git@github.com:...`
 addresses, paths, UUIDs, and ordinary prose. Masking twice gives the same
 result as masking once.
 
