@@ -246,6 +246,69 @@ class TensorFoldTests(Base):
         self.assertEqual(eng["glm"]["sanity"]["result"], "fail")
         self.assertEqual(eng["glm"]["features"], {})  # no probes on a wrong engine
 
+    def test_sanity_timeout_on_busy_engine_is_slow_not_down(self):
+        import time
+
+        def slow_chat(body):
+            time.sleep(1.0)
+            return 200, {"choices": [{"message": {"content": "42"}}]}
+
+        r = tensorfold_routes(connections=3)
+        r[("POST", "/v1/chat/completions")] = slow_chat
+        s = self.stub(r)
+        code, eng = self.run_json({"glm": tf(s.url)}, "--timeout", "0.3", "--bg-timeout", "0.3")
+        self.assertEqual(code, 1)
+        self.assertEqual(eng["glm"]["verdict"], "slow")
+        self.assertIn("not down", eng["glm"]["problems"][0])
+        # the same timeout on an idle engine is a real failure
+        r2 = tensorfold_routes(connections=0)
+        r2[("POST", "/v1/chat/completions")] = slow_chat
+        s2 = self.stub(r2)
+        code, eng = self.run_json({"glm": tf(s2.url)}, "--timeout", "0.3", "--bg-timeout", "0.3")
+        self.assertEqual(code, 1)
+        self.assertEqual(eng["glm"]["verdict"], "down")
+
+    def test_starved_background_sanity_is_retried_once_at_normal_priority(self):
+        import time
+        base = tensorfold_routes(connections=3)
+        chat = base[("POST", "/v1/chat/completions")]
+
+        def starve_background(body):
+            if body.get("priority") == "background":
+                time.sleep(1.0)  # queued behind other users' work
+            return chat(body)
+
+        base[("POST", "/v1/chat/completions")] = starve_background
+        s = self.stub(base)
+        code, eng = self.run_json({"glm": tf(s.url)}, "--timeout", "5", "--bg-timeout", "0.3")
+        e = eng["glm"]
+        self.assertEqual(code, 0)
+        self.assertEqual(e["sanity"]["result"], "pass")
+        self.assertEqual(e["features"]["background_priority"]["result"], "yes")
+        self.assertIn("starved", e["features"]["background_priority"]["reason"])
+        self.assertTrue(any("normal priority" in n for n in e["notes"]))
+        later = s.posts("/v1/chat/completions")[2:]  # after the starved and the retried sanity
+        self.assertTrue(later)
+        self.assertTrue(all("priority" not in b for b in later), "probes must not queue behind the load")
+
+    def test_starved_probe_is_retried_at_normal_priority(self):
+        import time
+        base = tensorfold_routes()
+        comp = base[("POST", "/v1/completions")]
+
+        def starve(body):
+            if body.get("priority") == "background":
+                time.sleep(1.0)
+            return comp(body)
+
+        base[("POST", "/v1/completions")] = starve
+        s = self.stub(base)
+        code, eng = self.run_json({"glm": tf(s.url)}, "--timeout", "5", "--bg-timeout", "0.3")
+        self.assertEqual(code, 0)
+        self.assertEqual(eng["glm"]["features"]["prompt_logprobs"]["result"], "no")
+        self.assertTrue(any("probe waited" in n for n in eng["glm"]["notes"]))
+        self.assertEqual(len(s.posts("/v1/completions")), 2)
+
     def test_null_answer_is_wrong(self):
         r = tensorfold_routes()
         r[("POST", "/v1/chat/completions")] = lambda b: (200, {"choices": [{"message": {"content": None}}]})

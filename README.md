@@ -37,6 +37,9 @@ glm       OK      GLM-5.3-Flash-EXL3        busy (7 running, 0 waiting)  pass   
   - `DOWN`: no answer, or it says it is not ready or still warming up.
   - `WRONG`: it answered, but the wrong model id or the wrong answer to the
     sanity question.
+  - `SLOW`: the sanity question timed out (even at normal priority) while the
+    engine was busy. It is not down, but it could not answer in time.
+    Re-run later or raise `--timeout`. Counts as exit 1.
   - `DRIFT`: it works, but a feature differs from what the registry expects.
   - `BUSY`: a shared engine in use by someone else; left alone (see below).
 - **LOAD**: whether anyone is using it right now (running and waiting
@@ -84,6 +87,11 @@ for that engine in `fleet.toml` in the same change as the deploy.
   use `max_tokens` of 1 to 8.
 - `priority: "background"` is sent wherever the engine accepts it, so coding
   agents on the same engine go first.
+- On a saturated engine, background requests wait behind everyone else. If
+  the background sanity request waits more than 20 seconds (`--bg-timeout`),
+  it is re-sent once at normal priority, the probes then go without the
+  priority flag, and a note says so. Only if that also times out is the
+  engine reported `SLOW` (or `DOWN` if it was idle).
 - **Shared engines.** Qwen on hyper03 serves one request at a time and the
   ghostwriter uses it, on a machine shared with another engineer. If its
   `/health` shows `live.connections` above 0, fleet-check sends it only GET

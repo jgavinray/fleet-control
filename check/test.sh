@@ -49,8 +49,8 @@ PY
         return 2=>    if any(r.verdict == "drift" for r in results):
         return 0'
   mutate "wrong answer accepted"  'r"\W*42\W*"=>r"\W*\d+\W*"'
-  mutate "down engine not fatal"  'if any(r.verdict in ("down", "wrong") for r in results):
-        return 1=>if any(r.verdict in ("wrong",) for r in results):
+  mutate "down engine not fatal"  'if any(r.verdict in ("down", "wrong", "slow") for r in results):
+        return 1=>if any(r.verdict in ("wrong", "slow") for r in results):
         return 1'
   mutate "feature hard-coded"     'if lp:
         return "yes", "logprobs returned"=>if False:

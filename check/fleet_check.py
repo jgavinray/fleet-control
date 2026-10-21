@@ -133,7 +133,7 @@ class Result:
     def __init__(self, name, cfg):
         self.name = name
         self.cfg = cfg
-        self.status = "ok"  # ok | down | wrong | skipped-busy
+        self.status = "ok"  # ok | slow | wrong | down | skipped-busy
         self.model = ""
         self.version = ""
         self.load = ""
@@ -143,9 +143,11 @@ class Result:
         self.notes = []
         self.requests = 0
 
+    RANK = {"ok": 0, "skipped-busy": 0, "slow": 1, "wrong": 2, "down": 3}
+
     def fail(self, status, why):
-        """Record a problem. `down` outranks `wrong`."""
-        if self.status != "down":
+        """Record a problem. The worst status wins: down, then wrong, then slow."""
+        if self.RANK[status] > self.RANK[self.status]:
             self.status = status
         self.problems.append(why)
 
@@ -155,7 +157,7 @@ class Result:
 
     @property
     def verdict(self):
-        if self.status in ("down", "wrong"):
+        if self.status in ("down", "wrong", "slow"):
             return self.status
         if self.drifted:
             return "drift"
@@ -257,12 +259,10 @@ def record_feature(res, name, result, reason):
 # Probes (TensorFold: OpenAI-style chat/completions)
 # ---------------------------------------------------------------------------
 
-def probe_guided(c, model, bg):
+def probe_guided(send, model):
     choices = ["apple", "granite"]
-    extra = {"guided_choice": choices}
-    if bg:
-        extra["priority"] = "background"
-    r = c.post("/v1/chat/completions", chat_body(model, "Which of these is a fruit?", 8, **extra))
+    r = send("/v1/chat/completions",
+             chat_body(model, "Which of these is a fruit?", 8, guided_choice=choices))
     if not r.ok:
         return classify_refusal(r)
     text = chat_text(r)
@@ -280,11 +280,9 @@ def probe_background(c, model):
     return classify_refusal(r)
 
 
-def probe_logprobs(c, model, bg):
-    extra = {"logprobs": True, "top_logprobs": 1}
-    if bg:
-        extra["priority"] = "background"
-    r = c.post("/v1/chat/completions", chat_body(model, "Say ok.", 1, **extra))
+def probe_logprobs(send, model):
+    r = send("/v1/chat/completions",
+             chat_body(model, "Say ok.", 1, logprobs=True, top_logprobs=1))
     if not r.ok:
         return classify_refusal(r)
     try:
@@ -296,7 +294,7 @@ def probe_logprobs(c, model, bg):
     return "no", "HTTP 200 but no logprobs in the answer (silently ignored)"
 
 
-def probe_prompt_logprobs(c, model, bg):
+def probe_prompt_logprobs(send, model):
     body = {
         "model": model,
         "prompt": "The sky is",
@@ -304,9 +302,7 @@ def probe_prompt_logprobs(c, model, bg):
         "temperature": 0,
         "prompt_logprobs": 1,
     }
-    if bg:
-        body["priority"] = "background"
-    r = c.post("/v1/completions", body)
+    r = send("/v1/completions", body)
     if not r.ok:
         return classify_refusal(r)
     j = r.json if isinstance(r.json, dict) else {}
@@ -376,19 +372,39 @@ def check_tensorfold(res, c, opts):
     # the engine accepts it; a 4xx then means the engine refuses it, so retry plain.
     want_bg = expected.get("background_priority") == "yes"
     extra = {"priority": "background"} if want_bg else {}
-    r = c.post("/v1/chat/completions", chat_body(model, SANITY_PROMPT, 16, **extra))
+    r = c.post("/v1/chat/completions", chat_body(model, SANITY_PROMPT, 16, **extra),
+               timeout=opts.bg_timeout if want_bg else None)
     bg_result = None
+    bg_ok = want_bg  # may we keep sending priority:"background" on the probes?
+    spent = r.elapsed
     if want_bg:
         if r.ok:
             bg_result = ("yes", "accepted with the sanity request (HTTP 200)")
         elif 400 <= r.status < 500:
             bg_result = classify_refusal(r)
+            bg_ok = False
             r = c.post("/v1/chat/completions", chat_body(model, SANITY_PROMPT, 16))
-    res.sanity["latency_s"] = round(r.elapsed, 3)
+            spent += r.elapsed
+        elif r.status == 0 and "timed out" in r.error and busy:
+            # Accepted but starved: a saturated engine serves background last.
+            bg_result = ("yes", f"accepted, but starved {opts.bg_timeout:g}s behind other work; "
+                                "sanity re-sent at normal priority")
+            bg_ok = False
+            res.notes.append(f"background-priority sanity request waited {opts.bg_timeout:g}s "
+                             f"behind other work ({res.load}); re-sent once at normal priority")
+            r = c.post("/v1/chat/completions", chat_body(model, SANITY_PROMPT, 16))
+            spent += r.elapsed
+    res.sanity["latency_s"] = round(spent, 3)
     if not r.ok:
         res.sanity.update(result="error", detail=r.why())
-        res.fail("down" if r.status == 0 or r.status >= 500 else "wrong",
-                 f"sanity request: {res.sanity['detail']}")
+        if r.status == 0 and "timed out" in r.error and busy:
+            # Background priority queues behind everyone; a busy engine is not a dead one.
+            res.fail("slow", f"sanity request timed out after {c.timeout:g}s while the engine is "
+                             f"{res.load}: not down, but it did not answer in time "
+                             "(re-run later, or raise --timeout)")
+        else:
+            res.fail("down" if r.status == 0 or r.status >= 500 else "wrong",
+                     f"sanity request: {res.sanity['detail']}")
         return
     text = chat_text(r)
     shown = "null" if text is None else repr(text.strip()[:30])
@@ -405,11 +421,23 @@ def check_tensorfold(res, c, opts):
     if bg_result is None:
         bg_result = probe_background(c, model)
     record_feature(res, "background_priority", *bg_result)
-    bg = bg_result[0] == "yes"  # send priority on later probes only where accepted
+    # Priority on the probes only where the engine accepts it and has not starved us.
+    state = {"bg": bg_ok and bg_result[0] == "yes"}
 
-    record_feature(res, "guided_choice", *probe_guided(c, model, bg))
-    record_feature(res, "logprobs", *probe_logprobs(c, model, bg))
-    record_feature(res, "prompt_logprobs", *probe_prompt_logprobs(c, model, bg))
+    def send(path, body):
+        if not state["bg"]:
+            return c.post(path, body)
+        r = c.post(path, dict(body, priority="background"), timeout=opts.bg_timeout)
+        if r.status == 0 and "timed out" in r.error:
+            state["bg"] = False
+            res.notes.append(f"a background-priority probe waited {opts.bg_timeout:g}s behind other "
+                             "work; it and the remaining probes were re-sent at normal priority")
+            r = c.post(path, body)
+        return r
+
+    record_feature(res, "guided_choice", *probe_guided(send, model))
+    record_feature(res, "logprobs", *probe_logprobs(send, model))
+    record_feature(res, "prompt_logprobs", *probe_prompt_logprobs(send, model))
 
 
 def check_laya(res, c, opts):
@@ -612,7 +640,7 @@ def render_table(results, quick):
 
 
 def exit_code(results):
-    if any(r.verdict in ("down", "wrong") for r in results):
+    if any(r.verdict in ("down", "wrong", "slow") for r in results):
         return 1
     if any(r.verdict == "drift" for r in results):
         return 2
@@ -644,6 +672,9 @@ def main(argv=None, out=None):
     ap.add_argument("--registry", default=os.environ.get("FLEET_REGISTRY", DEFAULT_REGISTRY),
                     help="path to fleet.toml")
     ap.add_argument("--timeout", type=float, default=60.0, help="seconds per request (default 60)")
+    ap.add_argument("--bg-timeout", type=float, default=20.0,
+                    help="seconds a background-priority sanity request may wait before it is "
+                         "re-sent once at normal priority (default 20)")
     ap.add_argument("--force-shared", action="store_true",
                     help="run sanity and probes on a shared engine even if it is busy")
     opts = ap.parse_args(argv)
