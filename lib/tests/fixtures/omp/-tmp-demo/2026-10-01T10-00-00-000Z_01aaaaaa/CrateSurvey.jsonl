@@ -1,0 +1,5 @@
+{"pad": "", "title": "", "type": "title", "updatedAt": "2026-10-01T10:00:10.000Z", "v": 1}
+{"cwd": "/tmp/demo", "id": "01aaaaaa-0000-7000-8000-000000000002", "parentSession": "/x/parent.jsonl", "timestamp": "2026-10-01T10:00:10.000Z", "type": "session", "version": 3}
+{"id": "i", "message": {"attribution": "agent", "content": [{"text": "Survey the crates", "type": "text"}], "role": "user"}, "parentId": null, "timestamp": "2026-10-01T10:00:11.000Z", "type": "message"}
+{"id": "i", "message": {"content": [{"arguments": {"command": "ls crates"}, "id": "d1", "name": "bash", "type": "toolCall"}], "role": "assistant", "stopReason": "toolUse"}, "parentId": null, "timestamp": "2026-10-01T10:00:12.000Z", "type": "message"}
+{"id": "i", "message": {"content": [{"text": "a b", "type": "text"}], "details": {}, "isError": false, "role": "toolResult", "toolCallId": "d1", "toolName": "bash"}, "parentId": null, "timestamp": "2026-10-01T10:00:13.000Z", "type": "message"}
