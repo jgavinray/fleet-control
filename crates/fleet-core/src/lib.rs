@@ -10,7 +10,9 @@
 
 pub mod http;
 pub mod kinds_rest;
+pub mod kinds_tensorfold;
 pub mod opts;
+pub mod probes;
 pub mod registry;
 pub mod result;
 
