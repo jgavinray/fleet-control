@@ -10,6 +10,8 @@ import tempfile
 import threading
 import tomllib
 import unittest
+import urllib.parse
+import unittest.mock
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -158,6 +160,10 @@ class Base(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.addCleanup(lambda: [s.close() for s in self.stubs])
+        # Never read the real ~/.config/fleet-control/local.toml in tests.
+        patcher = unittest.mock.patch.dict(os.environ, {"FLEET_LOCAL": os.path.join(self.tmp.name, "no-local.toml")})
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def stub(self, routes):
         s = Stub(routes)
@@ -538,6 +544,38 @@ class CliTests(Base):
         self.assertEqual(list(json.loads(t1)), sorted(json.loads(t1)))
 
 
+class LocalOverrideTests(Base):
+    def test_address_replaces_the_host_of_matching_names_only(self):
+        a = {"hyper01": "192.0.2.10"}
+        f = fleet_check.apply_local_addresses
+        self.assertEqual(f("http://hyper01.example.ts.net:8102/x", a), "http://192.0.2.10:8102/x")
+        self.assertEqual(f("http://hyper01:8102", a), "http://192.0.2.10:8102")
+        self.assertEqual(f("http://spark.example.ts.net:8888", a), "http://spark.example.ts.net:8888")
+        self.assertEqual(f("http://hyper01.other.com:1", a), "http://hyper01.other.com:1")
+
+    def test_load_reads_addresses_and_ignores_junk(self):
+        p = os.path.join(self.tmp.name, "local.toml")
+        with open(p, "w") as f:
+            f.write('[hosts.a]\naddress = "192.0.2.1"\n[hosts.b]\nnote = "x"\n[hosts.c]\naddress = ""\n')
+        self.assertEqual(fleet_check.load_local_addresses(p), {"a": "192.0.2.1"})
+        self.assertEqual(fleet_check.load_local_addresses(p + ".missing"), {})
+        with open(p, "w") as f:
+            f.write("not = [toml")
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(fleet_check.load_local_addresses(p), {})
+
+    def test_fleet_check_goes_through_the_override(self):
+        s = self.stub(tensorfold_routes())
+        port = s.server.server_address[1]
+        local = os.path.join(self.tmp.name, "local.toml")
+        with open(local, "w") as f:
+            f.write('[hosts.ghost]\naddress = "127.0.0.1"\n')
+        with unittest.mock.patch.dict(os.environ, {"FLEET_LOCAL": local}):
+            code, eng = self.run_json({"glm": tf(f"http://ghost.example.ts.net:{port}")})
+        self.assertEqual((code, eng["glm"]["verdict"]), (0, "ok"))
+        self.assertEqual(eng["glm"]["requests"], len(s.log))
+
+
 class RegistryTests(unittest.TestCase):
     """The real fleet.toml must be well formed."""
 
@@ -574,12 +612,25 @@ class RegistryTests(unittest.TestCase):
 
     def test_every_host_has_required_fields(self):
         for name, h in self.reg["hosts"].items():
-            for k in ("ip", "notes", "role", "ssh_user"):
+            for k in ("fqdn", "notes", "role", "ssh_user"):
                 self.assertIn(k, h, f"{name} lacks {k}")
+            self.assertNotIn("ip", h, f"{name}: no IP addresses in the public repo")
+            # the local override matches a URL host by its first label
+            self.assertTrue(h["fqdn"].endswith(".ts.net"), name)
+            self.assertEqual(h["fqdn"].split(".")[0], name, name)
 
-    def test_no_tailscale_addresses_secrets_or_timestamps(self):
-        self.assertNotRegex(self.text, r"\b100\.\d+\.\d+\.\d+\b")
-        self.assertNotIn(".ts.net", self.text)
+    def test_every_engine_url_is_a_host_fqdn(self):
+        fqdns = {h["fqdn"] for h in self.reg["hosts"].values()}
+        for name, e in self.reg["engines"].items():
+            for key in ("url", "exporter_url"):
+                if key in e:
+                    host = urllib.parse.urlsplit(e[key]).hostname
+                    self.assertIn(host, fqdns, f"{name}.{key}")
+            self.assertEqual(urllib.parse.urlsplit(e["url"]).hostname,
+                             self.reg["hosts"][e["host"]]["fqdn"], name)
+
+    def test_no_ip_addresses_secrets_or_timestamps(self):
+        self.assertNotRegex(self.text, r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b")
         self.assertNotRegex(self.text, r"(?i)api[_-]?key\s*=|token\s*=|password\s*=|secret\s*=")
         self.assertNotRegex(self.text, r"\b20\d\d-\d\d-\d\dT\d\d:")
 

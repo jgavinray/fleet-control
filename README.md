@@ -118,6 +118,29 @@ for that engine in `fleet.toml` in the same change as the deploy.
 - jev-glm's sanity decision makes 8 background requests to GLM (that is how
   the service works), so it is the slowest row.
 
+## The local LAN override (untracked)
+
+The owner's standing rule is to connect over the home LAN, not Tailscale
+(Tailscale SSH once muddied a forensics trace). Since the repo holds
+Tailscale names only, each machine that should use the LAN keeps a small
+file outside the repo, `~/.config/fleet-control/local.toml` (or the file
+named by `$FLEET_LOCAL`):
+
+```toml
+# Never commit this file.
+[hosts.hyper01]
+address = "192.0.2.10"     # this host's LAN address (example value)
+
+[hosts.spark3]
+address = "192.0.2.11"
+```
+
+A URL whose host is `hyper01` or `hyper01.<tailnet>.ts.net` is rewritten to
+that address before it is used, by both `fleet-check` and `fleetlib`. Hosts
+with no entry keep their Tailscale name. If the file is missing, nothing
+changes; if it is not valid TOML it is ignored with a warning. To check the
+Tailscale route on purpose, run with `FLEET_LOCAL=/dev/null`.
+
 ## The registry: `fleet.toml`
 
 Two sections: `[engines.*]` and `[hosts.*]`. The comments in the file say what
@@ -125,7 +148,10 @@ each field means. Rules:
 
 - Keys are sorted and there are no timestamps, so a diff shows only real
   changes. A test checks this.
-- Base URLs and LAN addresses only. No keys, no Tailscale addresses.
+- Base URLs with Tailscale names (FQDNs) only. No keys and no IP addresses
+  of any kind; the repo is public. `check/test.sh` fails if a tracked file
+  holds a private (RFC 1918) or Tailscale (CGNAT, 100.64/10) address, or the name
+  of another person who uses a host.
 - It records facts that were checked. `notes` is for the warnings people keep
   re-learning (for example "NEVER use the old `dsv41-exl3.service`").
 
@@ -142,7 +168,7 @@ each field means. Rules:
    notes = "One line of things people need to know."
    supervisor_scope = "system"         # "user", "system", or "external"
    supervisor_unit = "my-engine.service"
-   url = "http://192.168.0.213:9999"   # no trailing slash
+   url = "http://spark3.<tailnet>.ts.net:9999"   # no trailing slash; the host's fqdn
    watchdog_id = ""                    # id in llm-watchdog services.json, or ""
 
    [engines.my-engine.expected_features]

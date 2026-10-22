@@ -7,7 +7,7 @@ from pathlib import Path
 
 from fleetlib import classify as C
 from fleetlib.classify import Classification, EngineBusy, EngineError, classify, parse_option, waiting_count
-from fleetlib.registry import DEFAULTS, Engine, get_engine, load_registry
+from fleetlib.registry import DEFAULTS, Engine, apply_local_address, get_engine, load_registry
 
 from .helpers import Stub, fake
 
@@ -317,6 +317,10 @@ class Registry(unittest.TestCase):
         self.addCleanup(lambda: __import__("shutil").rmtree(self.tmp, True))
         self._env = os.environ.pop("FLEET_TOML", None)
         self.addCleanup(lambda: os.environ.__setitem__("FLEET_TOML", self._env) if self._env else os.environ.pop("FLEET_TOML", None))
+        # Never read the real ~/.config/fleet-control/local.toml in tests.
+        self._local = os.environ.get("FLEET_LOCAL")
+        os.environ["FLEET_LOCAL"] = str(self.tmp / "no-local.toml")
+        self.addCleanup(lambda: os.environ.__setitem__("FLEET_LOCAL", self._local) if self._local is not None else os.environ.pop("FLEET_LOCAL", None))
 
     def write(self, text):
         p = self.tmp / "fleet.toml"
@@ -331,7 +335,29 @@ class Registry(unittest.TestCase):
         q = DEFAULTS["qwen"]
         self.assertEqual((q.method, q.max_inflight, q.share_check), ("parse", 1, True))
         self.assertEqual(DEFAULTS["laya"].method, "systemone")
-        self.assertEqual(DEFAULTS["jev-glm"].url, "http://192.168.0.44:8102")
+        self.assertEqual(DEFAULTS["jev-glm"].url, "http://hyper01.puma-wyvern.ts.net:8102")
+
+    def test_local_override_maps_a_host_to_its_address(self):
+        local = self.tmp / "local.toml"
+        local.write_text('[hosts.hyper01]\naddress = "192.0.2.10"\n\n[hosts.spark]\naddress = "192.0.2.11"\n')
+        os.environ["FLEET_LOCAL"] = str(local)
+        os.environ["FLEET_TOML"] = str(self.tmp / "nope.toml")
+        reg = load_registry()
+        self.assertEqual(reg["jev-glm"].url, "http://192.0.2.10:8102")
+        self.assertEqual(reg["laya"].url, "http://192.0.2.10:8001")
+        self.assertEqual(reg["deepseek"].url, "http://192.0.2.11:8888")
+        self.assertEqual(reg["glm"], DEFAULTS["glm"])  # no entry for spark3: unchanged
+        # only the host's own name or a .ts.net name of it is rewritten
+        self.assertEqual(apply_local_address("http://hyper01.example.com:1", {"hyper01": "192.0.2.10"}),
+                         "http://hyper01.example.com:1")
+        self.assertEqual(apply_local_address("http://hyper01:1/x", {"hyper01": "192.0.2.10"}), "http://192.0.2.10:1/x")
+
+    def test_bad_local_override_is_ignored(self):
+        local = self.tmp / "local.toml"
+        local.write_text("not = [toml")
+        os.environ["FLEET_LOCAL"] = str(local)
+        os.environ["FLEET_TOML"] = str(self.tmp / "nope.toml")
+        self.assertEqual(load_registry(), DEFAULTS)
 
     def test_missing_file_means_defaults(self):
         os.environ["FLEET_TOML"] = str(self.tmp / "nope.toml")
@@ -342,13 +368,13 @@ class Registry(unittest.TestCase):
             load_registry(self.tmp / "nope.toml")
 
     def test_registry_overrides_only_what_it_names(self):
-        p = self.write('[engines.glm]\nurl = "http://glm.test:9000/v1/"\nk = 7\n\n[engines.laya]\nhost = "10.0.0.5"\nport = 8001\n')
+        p = self.write('[engines.glm]\nurl = "http://glm.test:9000/v1/"\nk = 7\n\n[engines.laya]\nhost = "laya.test"\nport = 8001\n')
         reg = load_registry(p)
         self.assertEqual(reg["glm"].url, "http://glm.test:9000")
         self.assertEqual(reg["glm"].k, 7)
         self.assertEqual(reg["glm"].model, DEFAULTS["glm"].model)
         self.assertEqual(reg["glm"].priority, "background")
-        self.assertEqual(reg["laya"].url, "http://10.0.0.5:8001")
+        self.assertEqual(reg["laya"].url, "http://laya.test:8001")
         self.assertEqual(reg["laya"].method, "systemone")
         self.assertEqual(reg["qwen"], DEFAULTS["qwen"])
 

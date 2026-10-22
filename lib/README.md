@@ -216,11 +216,15 @@ prints JSON.
    true` means back off on other connections. `lfm2d` engines are ignored here.
    Optional tuning keys: `method`, `k`, `max_inflight`, `temperature`,
    `max_tokens`, `timeout`, `priority`.
-2. **Built-in defaults** for `glm` (192.168.0.213:8888), `deepseek`
-   (192.168.0.33:8888), `qwen` (192.168.0.43:8081), `laya`
-   (192.168.0.44:8001) and `jev-glm` (192.168.0.44:8102), used when there is
-   no file or the file does not list the engine. A registry entry only
-   overrides the keys it names.
+2. **Built-in defaults** for `glm` (spark3, :8888), `deepseek` (spark, :8888),
+   `qwen` (hyper03, :8081), `laya` (hyper01, :8001) and `jev-glm` (hyper01,
+   :8102), as Tailscale names, used when there is no file or the file does
+   not list the engine. A registry entry only overrides the keys it names.
+
+Whichever source an engine comes from, its URL then goes through the optional
+local LAN override (`~/.config/fleet-control/local.toml`, or the file named by
+`$FLEET_LOCAL`; see the top-level README). Tests point `FLEET_LOCAL` at a
+missing file so they never read the real one.
 
 You can also pass an `Engine(...)` object instead of a name.
 

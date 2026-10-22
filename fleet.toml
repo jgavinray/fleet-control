@@ -6,7 +6,13 @@
 #     by name, and the top-level sections are sorted too (engines, then
 #     hosts), so a diff shows only real changes. No timestamps.
 #   - No secrets. Base URLs only.
-#   - Use LAN addresses, never Tailscale.
+#   - Hosts and URLs use Tailscale fully qualified domain names (FQDNs). No IP
+#     address of any kind goes in this file or anywhere else in the repo
+#     (check/test.sh fails if one does). The repo is public.
+#   - To connect over the home LAN instead (the owner's standing rule, because
+#     Tailscale SSH muddied a forensics trace), put a host-to-address map in
+#     the untracked local file ~/.config/fleet-control/local.toml (or the file
+#     named by $FLEET_LOCAL). See "The local LAN override" in README.md.
 #   - Facts here come from ~/exomemory/wiki (llm-watchdog, glm53-tensorfold-
 #     upgrade, lfm2d-assessment, fleet-hosts-plaquedarchon, gemma-tested),
 #     the warm-start block in ~/exomemory/signoff.md, and
@@ -42,7 +48,7 @@ model = "DeepSeek-V4.1-Flash-1017"
 notes = "Rejects guided_choice and JSON schema with 400. NEVER use the old dsv41-exl3.service."
 supervisor_scope = "user"
 supervisor_unit = "dsv41-boot-start.service"
-url = "http://192.168.0.33:8888"
+url = "http://spark.puma-wyvern.ts.net:8888"
 watchdog_id = "deepseek-head"
 
 [engines.deepseek.expected_features]
@@ -60,7 +66,7 @@ model = "GLM-5.3-Flash-EXL3"
 notes = "TensorFold 0.6.0. guided_choice needs thinking off. logprobs refused (400); prompt_logprobs ignored (200, no field)."
 supervisor_scope = "system"
 supervisor_unit = "glm53-tf.service"
-url = "http://192.168.0.213:8888"
+url = "http://spark3.puma-wyvern.ts.net:8888"
 watchdog_id = "glm-head"
 
 [engines.glm.expected_features]
@@ -78,7 +84,7 @@ model = "jev-glm-0.1"
 notes = "POST /v1/systemone. Needs GLM to be up (GET /ready)."
 supervisor_scope = "user"
 supervisor_unit = "jev-glm.service"
-url = "http://192.168.0.44:8102"
+url = "http://hyper01.puma-wyvern.ts.net:8102"
 watchdog_id = ""
 
 # laya: the decision classifier. Answers /v1/systemone. Run by
@@ -96,14 +102,14 @@ model = "laya-rl-agent"
 notes = "English checkpoint. The P4 is out of the machine; hyper01 has only a Tesla T4. Reports cuda:0 but the unit pins CUDA_VISIBLE_DEVICES=1 and the process holds no GPU handle, so probably CPU (unproven). Near chance on the owner's jobs; check that it is up, not that it is good."
 supervisor_scope = "system"
 supervisor_unit = "laya.service"
-url = "http://192.168.0.44:8001"
+url = "http://hyper01.puma-wyvern.ts.net:8001"
 watchdog_id = "laya"
 
 # lfm2d 8B opinion engine on hyper01's T4. The exporter on :9170 is its
 # Prometheus bridge, checked together with it. The engine has no /health, so
 # GET /v1/models is the health check.
 [engines.lfm2d-8b]
-exporter_url = "http://192.168.0.44:9170"
+exporter_url = "http://hyper01.puma-wyvern.ts.net:9170"
 health_path = "/v1/models"
 host = "hyper01"
 kind = "lfm2d"
@@ -112,7 +118,7 @@ notes = "Opinion engine. Cheap read: GET /v1/opinion/specs must list at least on
 read = "specs"
 supervisor_scope = "user"
 supervisor_unit = "lfm2d-system1-t4.service"
-url = "http://192.168.0.44:8099"
+url = "http://hyper01.puma-wyvern.ts.net:8099"
 watchdog_id = "lfm2d-exporter"
 
 # lfm2d encoder heads (embedder, router, PII/credentials) on zapp's CPU.
@@ -125,7 +131,7 @@ notes = "Cheap read: POST /v1/spans/credentials with a tiny input. A 14 KB input
 read = "spans"
 supervisor_scope = "user"
 supervisor_unit = "lfm2d-encoder.service"
-url = "http://192.168.0.32:8088"
+url = "http://zapp.puma-wyvern.ts.net:8088"
 watchdog_id = "lfm2d-zapp"
 
 # Qwen3.8 27B on hyper03 (Intel XPU). One request at a time, shared with the
@@ -138,7 +144,7 @@ notes = "Serves one request at a time. guided_choice fails with: libtfgrammar.so
 shared = true
 supervisor_scope = "external"
 supervisor_unit = ""
-url = "http://192.168.0.43:8081"
+url = "http://hyper03.puma-wyvern.ts.net:8081"
 watchdog_id = "qwen-hyper03"
 
 [engines.qwen.expected_features]
@@ -148,7 +154,7 @@ logprobs = "no"
 prompt_logprobs = "no"
 
 # ---------------------------------------------------------------------------
-# HOSTS: every machine that matters. `ip` is the LAN address; `ssh_user` is
+# HOSTS: every machine that matters. `fqdn` is its Tailscale name; `ssh_user` is
 # the account the owner's key logs in as. `shared = true` means someone else
 # also uses the machine, so nothing here may restart or load it.
 # ---------------------------------------------------------------------------
@@ -157,47 +163,47 @@ prompt_logprobs = "no"
 # (Tesla T4, the machine's only GPU), laya (probably CPU only; see the laya
 # engine) and jev-glm.
 [hosts.hyper01]
-ip = "192.168.0.44"
+fqdn = "hyper01.puma-wyvern.ts.net"
 notes = "Always-on hub. Do not read ~/.bashrc here. Watchdog: llm-watchdog.service."
 role = "hub"
 ssh_user = "jgavinray"
 
-# SHARED with another engineer (user zurih). Runs the Qwen engine, which the
+# SHARED with another engineer. Runs the Qwen engine, which the
 # owner's ghostwriter uses. No restarts, no GPU tests, no ssh recovery.
 [hosts.hyper03]
-ip = "192.168.0.43"
-notes = "SHARED with another engineer (user zurih): no restarts, no GPU tests. Check-only."
+fqdn = "hyper03.puma-wyvern.ts.net"
+notes = "SHARED with another engineer: no restarts, no GPU tests. Check-only."
 role = "shared-gpu"
 shared = true
 ssh_user = "jgavinray"
 
-# A second Mac (M2, 24 GB) on the 192.168.2.x subnet.
+# A second Mac (M2, 24 GB) on a separate subnet from the main LAN.
 [hosts.plaquedarchon]
-ip = "192.168.2.208"
+fqdn = "plaquedarchon.puma-wyvern.ts.net"
 notes = "Mac M2, 24 GB. Role not recorded: ask the owner before running GPU or long jobs. No engines."
 role = "workstation"
 ssh_user = "jgavinray"
 
 # DGX Spark that is the DeepSeek head (rank 0). spark2 is the worker behind it.
 [hosts.spark]
-ip = "192.168.0.33"
+fqdn = "spark.puma-wyvern.ts.net"
 notes = "DeepSeek head (rank 0). Supervisor is the USER unit dsv41-boot-start.service. Never touch dsv41-exl3.service."
 role = "engine-head"
 ssh_user = "jgavinray"
 
 # DeepSeek worker (rank 1). Reached through spark over the private cable link
-# (192.168.100.11). It also has a LAN address, 192.168.0.180; the Mac's ssh key
-# is refused there, so ssh goes through spark.
+# between the two (that address is in the local override). It also has a LAN
+# address; the Mac's ssh key is refused there, so ssh goes through spark.
 [hosts.spark2]
 behind = "spark"
-ip = "192.168.100.11"
-notes = "DeepSeek worker (rank 1). Reached through spark over the private cable link. Also has LAN address 192.168.0.180, but the Mac's ssh key is refused there."
+fqdn = "spark2.puma-wyvern.ts.net"
+notes = "DeepSeek worker (rank 1). Reached through spark over the private cable link. Also has a LAN address, but the Mac's ssh key is refused there."
 role = "engine-worker"
 ssh_user = "jgavinray"
 
 # DGX Spark that is the GLM head (rank 0). spark4 is the worker behind it.
 [hosts.spark3]
-ip = "192.168.0.213"
+fqdn = "spark3.puma-wyvern.ts.net"
 notes = "GLM head (rank 0). Never build or copy images while GLM is loaded; memory is near full."
 role = "engine-head"
 ssh_user = "jgavinray"
@@ -205,28 +211,28 @@ ssh_user = "jgavinray"
 # GLM worker (rank 1). Has a LAN address, used for ssh only.
 [hosts.spark4]
 behind = "spark3"
-ip = "192.168.0.206"
+fqdn = "spark4.puma-wyvern.ts.net"
 notes = "GLM worker (rank 1). The engine is served from spark3."
 role = "engine-worker"
 ssh_user = "jgavinray"
 
 # The owner's Mac (this one). Runs the runner, the exomemory store, and fleet-check.
 [hosts.wabbajack]
-ip = "127.0.0.1"
+fqdn = "wabbajack.puma-wyvern.ts.net"
 notes = "Owner's Mac. Where fleet-check, the runner and exomemory live."
 role = "workstation"
 ssh_user = "jgavinray"
 
 # CPU box that serves the lfm2d encoder heads (embedder, router, PII).
 [hosts.zapp]
-ip = "192.168.0.32"
+fqdn = "zapp.puma-wyvern.ts.net"
 notes = "lfm2d encoders on CPU, 7.6 GB RAM. The daemon runs under the user manager of the local account zoidberg. Keep requests to 2 KB or less."
 role = "cpu-encoders"
 ssh_user = "jgavinray"
 
 # A Mac set up as a full omp workstation on 9/25/2026.
 [hosts.zoidberg]
-ip = "192.168.0.57"
+fqdn = "zoidberg.puma-wyvern.ts.net"
 notes = "Mac workstation mirroring wabbajack. No engines."
 role = "workstation"
 ssh_user = "jgavinray"

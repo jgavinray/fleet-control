@@ -15,6 +15,9 @@ run_tests() {
   python3 -m unittest discover -s "$1/tests" -p 'test_*.py' "${@:2}"
 }
 
+echo "== leak gate (no private or Tailscale IP, no other-engineer name, in any tracked file)"
+python3 "$here/leak_check.py"
+
 echo "== unit tests"
 run_tests "$here"
 
@@ -55,6 +58,21 @@ PY
   mutate "feature hard-coded"     'if lp:
         return "yes", "logprobs returned"=>if False:
         return "yes", "logprobs returned"'
+  # The leak gate must fail on a copy of the repo with a planted leak.
+  for plant in "$(printf '192.168.%s' 1.5)" "$(printf '10.%s' 0.0.5)" "$(printf '172.20.%s' 3.4)" "$(printf '100.101.%s' 102.103)" "$(printf 'zu%s' rih)"; do
+    rm -rf "$tmp/leak"; mkdir -p "$tmp/leak"
+    cp -R "$here/../." "$tmp/leak/" 2>/dev/null || true
+    rm -rf "$tmp/leak/.git"
+    echo "note: $plant" >> "$tmp/leak/README.md"
+    if python3 "$here/leak_check.py" "$tmp/leak" >/dev/null 2>&1; then
+      echo "FAIL: leak gate stayed green with a planted leak"; exit 1
+    fi
+    echo "ok: leak gate went red for a planted leak"
+  done
+  rm -rf "$tmp/leak"; mkdir -p "$tmp/leak"; cp -R "$here/../." "$tmp/leak/"; rm -rf "$tmp/leak/.git"
+  echo "note: 192.0.2.7 and 127.0.0.1 and 1.10.0.5 and 100.63.1.1 and 172.32.0.1" >> "$tmp/leak/README.md"
+  python3 "$here/leak_check.py" "$tmp/leak" >/dev/null || { echo "FAIL: leak gate rejected allowed addresses"; exit 1; }
+  echo "ok: leak gate allows documentation, loopback and public addresses"
 fi
 
 echo "PASS"

@@ -5,7 +5,18 @@ Two sources, in this order:
 1. the registry file ``fleet.toml`` (found next to this library in the
    fleet-control checkout, or at ``$FLEET_TOML``, or at
    ``~/dev/fleet-control/fleet.toml``), if it exists and lists the engine;
-2. the built-in defaults below (the addresses in use on 10/20/2026).
+2. the built-in defaults below (Tailscale names; the repo is public, so no IP
+   address is ever written here).
+
+Whichever source an engine comes from, its URL is then passed through the
+optional local LAN override, ``~/.config/fleet-control/local.toml`` (or the
+file named by ``$FLEET_LOCAL``), which maps a host to its LAN address::
+
+    [hosts.hyper01]
+    address = "192.0.2.10"
+
+A URL whose host is ``hyper01`` or ``hyper01.<tailnet>.ts.net`` is rewritten
+to that address. The same rule is in ``check/fleet_check.py``.
 
 A registry entry only needs to say what differs from the default, so an entry
 with just ``url`` for ``glm`` keeps the default model, method and limits.
@@ -36,7 +47,9 @@ list with a ``name`` key; ``host`` + ``port`` can stand in for ``url``.
 from __future__ import annotations
 
 import os
+import sys
 import tomllib
+import urllib.parse
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Optional
@@ -67,18 +80,18 @@ class Engine:
 
 DEFAULTS: "dict[str, Engine]" = {
     # GLM on spark3: constrained decoding, so sample K times and count.
-    "glm": Engine("glm", "http://192.168.0.213:8888", "guided_choice", "GLM-5.3-Flash-EXL3",
+    "glm": Engine("glm", "http://spark3.puma-wyvern.ts.net:8888", "guided_choice", "GLM-5.3-Flash-EXL3",
                   k=5, max_inflight=2, temperature=1.0, priority="background"),
     # DeepSeek rejects guided_choice: ask for one word and parse it.
-    "deepseek": Engine("deepseek", "http://192.168.0.33:8888", "parse", "DeepSeek-V4.1-Flash-1017",
+    "deepseek": Engine("deepseek", "http://spark.puma-wyvern.ts.net:8888", "parse", "DeepSeek-V4.1-Flash-1017",
                        k=1, max_inflight=1, temperature=0.0, seed_param=False),
     # Qwen is shared: one request at a time, and back off when anyone else is on it.
-    "qwen": Engine("qwen", "http://192.168.0.43:8081", "parse", "Qwen3.8-27B-MLX-4bit",
+    "qwen": Engine("qwen", "http://hyper03.puma-wyvern.ts.net:8081", "parse", "Qwen3.8-27B-MLX-4bit",
                    k=1, max_inflight=1, share_check=True, temperature=0.0, seed_param=False),
     # laya (hyper01, :8001): Jev-style /v1/systemone, probabilities come back from the service.
-    "laya": Engine("laya", "http://192.168.0.44:8001", "systemone", "laya-rl-agent", max_inflight=1),
+    "laya": Engine("laya", "http://hyper01.puma-wyvern.ts.net:8001", "systemone", "laya-rl-agent", max_inflight=1),
     # jev-glm (hyper01): the GLM-backed service with the same /v1/systemone wire format.
-    "jev-glm": Engine("jev-glm", "http://192.168.0.44:8102", "systemone", "jev-glm-0.1", max_inflight=2),
+    "jev-glm": Engine("jev-glm", "http://hyper01.puma-wyvern.ts.net:8102", "systemone", "jev-glm-0.1", max_inflight=2),
 }
 
 _TABLE_NAMES = ("engines", "engine", "servers", "server", "models", "model", "services", "service")
@@ -95,6 +108,48 @@ def default_path() -> Optional[Path]:
         if p.is_file():
             return p
     return None
+
+
+def local_path() -> Path:
+    env = os.environ.get("FLEET_LOCAL")
+    return Path(env) if env else Path.home() / ".config" / "fleet-control" / "local.toml"
+
+
+def local_addresses(path: "Optional[str | os.PathLike[str]]" = None) -> "dict[str, str]":
+    """{host name: LAN address} from the local override file; {} if there is none."""
+    p = Path(path) if path else local_path()
+    try:
+        with open(p, "rb") as fh:
+            doc = tomllib.load(fh)
+    except OSError:
+        return {}
+    except tomllib.TOMLDecodeError as e:
+        print(f"fleetlib: ignoring unreadable local override {p}: {e}", file=sys.stderr)
+        return {}
+    hosts = doc.get("hosts")
+    return {n: h["address"] for n, h in (hosts.items() if isinstance(hosts, dict) else ())
+            if isinstance(h, dict) and isinstance(h.get("address"), str) and h["address"]}
+
+
+def apply_local_address(url: str, addresses: "dict[str, str]") -> str:
+    """Swap the host part of ``url`` for its local address, if one is set."""
+    parts = urllib.parse.urlsplit(url)
+    host = parts.hostname or ""
+    name = host.split(".")[0]
+    if name not in addresses or not (host == name or host.endswith(".ts.net")):
+        return url
+    addr = addresses[name]
+    if ":" in addr:
+        addr = f"[{addr}]"
+    netloc = addr + (f":{parts.port}" if parts.port else "")
+    return urllib.parse.urlunsplit(parts._replace(netloc=netloc))
+
+
+def _localize(engines: "dict[str, Engine]") -> "dict[str, Engine]":
+    addrs = local_addresses()
+    if not addrs:
+        return engines
+    return {n: replace(e, url=apply_local_address(e.url, addrs)) for n, e in engines.items()}
 
 
 def _clean_url(u: str) -> str:
@@ -172,18 +227,18 @@ def load_registry(path: "Optional[str | os.PathLike[str]]" = None) -> "dict[str,
     engines = dict(DEFAULTS)
     p = Path(path) if path else default_path()
     if p is None:
-        return engines
+        return _localize(engines)
     if path and not p.is_file():
         raise FileNotFoundError(f"fleet registry not found: {p}")
     if not p.is_file():
-        return engines
+        return _localize(engines)
     with open(p, "rb") as fh:
         doc = tomllib.load(fh)
     for name, v in _entries(doc):
         e = _apply(engines.get(name), name, v)
         if e is not None:
             engines[name] = e
-    return engines
+    return _localize(engines)
 
 
 def get_engine(engine: "str | Engine", registry: "Optional[dict[str, Engine]]" = None) -> Engine:

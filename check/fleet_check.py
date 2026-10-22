@@ -18,6 +18,7 @@ import sys
 import time
 import tomllib
 import urllib.error
+import urllib.parse
 import urllib.request
 
 FEATURES = ("guided_choice", "background_priority", "logprobs", "prompt_logprobs")
@@ -36,6 +37,49 @@ UNSUPPORTED_RE = re.compile(r"required|not supported|unsupported|not implemented
 DEFAULT_REGISTRY = os.path.join(
     os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "fleet.toml"
 )
+
+# The repo is public, so fleet.toml holds Tailscale names only. The owner's
+# standing rule is to connect over the home LAN, so an optional untracked file
+# maps a host to its LAN address:
+#
+#   [hosts.hyper01]
+#   address = "192.0.2.10"
+#
+# A URL whose host is that host's name (hyper01, or hyper01.<tailnet>.ts.net)
+# is rewritten to the address. The same rule lives in fleetlib.registry.
+DEFAULT_LOCAL = os.path.join(os.path.expanduser("~"), ".config", "fleet-control", "local.toml")
+
+
+def load_local_addresses(path=None):
+    """{host name: address} from the local override file; {} if there is none."""
+    path = path or os.environ.get("FLEET_LOCAL", DEFAULT_LOCAL)
+    try:
+        with open(path, "rb") as f:
+            doc = tomllib.load(f)
+    except OSError:
+        return {}
+    except tomllib.TOMLDecodeError as e:
+        print(f"fleet-check: ignoring unreadable local override {path}: {e}", file=sys.stderr)
+        return {}
+    out = {}
+    for name, h in (doc.get("hosts") or {}).items():
+        if isinstance(h, dict) and isinstance(h.get("address"), str) and h["address"]:
+            out[name] = h["address"]
+    return out
+
+
+def apply_local_addresses(url, addresses):
+    """Swap the host part of `url` for its local address, if one is set."""
+    parts = urllib.parse.urlsplit(url)
+    host = parts.hostname or ""
+    name = host.split(".")[0]
+    if name not in addresses or not (host == name or host.endswith(".ts.net")):
+        return url
+    addr = addresses[name]
+    if ":" in addr:
+        addr = f"[{addr}]"
+    netloc = addr + (f":{parts.port}" if parts.port else "")
+    return urllib.parse.urlunsplit(parts._replace(netloc=netloc))
 
 
 # ---------------------------------------------------------------------------
@@ -686,6 +730,12 @@ def main(argv=None, out=None):
         print(f"fleet-check: cannot read registry {opts.registry}: {e}", file=sys.stderr)
         return 1
     engines = reg.get("engines", {})
+    local = load_local_addresses()
+    if local:
+        for cfg in engines.values():
+            for key in ("url", "exporter_url"):
+                if isinstance(cfg.get(key), str):
+                    cfg[key] = apply_local_addresses(cfg[key], local)
     names = opts.engine or sorted(engines)
     unknown = [n for n in names if n not in engines]
     if unknown:
