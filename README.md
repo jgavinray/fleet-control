@@ -242,6 +242,24 @@ engine is contacted.
 `crates/parity.py`. Message wording may differ; counts, fields and exit codes
 do not.
 
+**Known divergences from the Python tool.**
+
+- JSON bodies containing `NaN` or `Infinity` are accepted by Python's
+  `json.loads` but rejected by `serde_json`: the Rust tool treats such a
+  reply as unparseable.
+- A timeout applies to the whole request in the Rust tool (ureq's global
+  deadline) rather than to each socket operation as in Python: a response
+  that trickles in indefinitely in small chunks times out in Rust where
+  Python would succeed.
+- Error-message and note text may differ in wording; the gate compares
+  problem and note counts, not text.
+- Request bodies are serialized with sorted keys, and the tool identifies
+  itself with ureq's default `User-Agent`, not Python-urllib's.
+- Where the Python would crash on a malformed reply or registry (uncaught
+  `TypeError`, `KeyError`, `AttributeError` or `ValueError`), the Rust tool
+  reports the failure through its normal statuses and exit code 1 instead of
+  a traceback; the exit code matches.
+
 **Requirements.** A Rust toolchain (the port is built with 1.92); `serde_json`,
 `toml` and `ureq` are fetched from crates.io on the first build. The Python
 side stays Python 3.11+ standard-library only.
