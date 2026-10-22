@@ -194,6 +194,72 @@ real check is running `fleet-check`.
 - The check cannot see inside a machine. For supervisors, logs and restarts,
   use the unit named in `fleet.toml` and the llm-watchdog on hyper01.
 
+## Stopgap uptime alert (Mac)
+
+`stopgap/` is a small, disposable watcher so the owner is told when an engine is
+down, without having to ask. Step 0 of `fleet-uptime-design.md`; the planned
+`fleet-watch` daemon replaces it.
+
+**What it does.** A LaunchAgent runs `~/.local/bin/fleet-check --quick --json`
+every 2 minutes on the Mac. `--quick` skips the feature probes, so it stays
+gentle on hyper03 and on Qwen, which serves one request at a time. Each run:
+
+- appends one line to the history file (see below);
+- keeps the last 5 results per engine, where failed means `down` or `wrong`
+  (`slow`, `busy` and feature drift do not count);
+- shows a desktop notification when an engine failed **3 of its last 5 runs**,
+  once per outage, naming the engine and the first problem line;
+- shows one "back up" notification after **2 passes in a row**, then clears that
+  engine's window. A flapping engine (down, up, down, up) never gets two passes
+  in a row, so it is one alert, not many;
+- if several engines cross the line in the same run, sends one notice naming all;
+- if `fleet-check` itself cannot run (Mac offline, crash), logs an `error` line
+  and says nothing: that run counts for nobody.
+
+**Where things are.**
+
+| What | Where |
+|---|---|
+| History, one JSON line per run | `~/.local/state/fleet-stopgap/history.jsonl` |
+| Per-engine window and open alerts | `~/.local/state/fleet-stopgap/state.json` |
+| launchd output and errors | `~/.local/state/fleet-stopgap/launchd.log` |
+| Installed copy of the script | `~/.local/libexec/fleet-stopgap/fleet-stopgap.py` |
+| The LaunchAgent | `~/Library/LaunchAgents/com.jgavinray.fleet-stopgap.plist` |
+
+**Was it up overnight?** Each history line has `ts`, `result` (`ok`, `fail` or
+`error`), the status of every engine, the first problem for each failing one,
+and any `alert:` / `recovered:` events. For example, every run since 10 PM that
+was not fully healthy:
+
+```
+jq -c 'select(.ts > "2026-10-21T22:00" and .result != "ok") | {ts, result, engines}' \
+  ~/.local/state/fleet-stopgap/history.jsonl
+```
+
+About 720 lines a day, roughly 300 KB.
+
+**Install, stop, restart.**
+
+```
+stopgap/install.sh            # install or reinstall, and start (also runs once at once)
+stopgap/install.sh uninstall  # stop and remove; history is kept
+launchctl bootout gui/$(id -u)/com.jgavinray.fleet-stopgap      # stop now (it comes back at next login)
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.jgavinray.fleet-stopgap.plist   # start again
+launchctl print gui/$(id -u)/com.jgavinray.fleet-stopgap        # is it loaded, when did it last run
+```
+
+**Tests.** `stopgap/test.sh` fakes `fleet-check` and the notifier (no engine is
+touched) and checks: no alert on 1 or 2 failures in 5, an alert at 3, no repeat
+alert while it continues, exactly one alert for a flapping engine, one recovery
+note, nothing on a `fleet-check` crash. `stopgap/test.sh --selftest` also breaks
+copies of the script six ways and requires the tests to go red each time.
+
+**Known gaps.** It only runs while the Mac is awake and online, and it sees what
+`fleet-check` sees: it cannot tell a driver or disk cause from a crash. The first
+run after loading the LaunchAgent on 10/22/2026 saw four engines as "No route to
+host" while a terminal run a minute later saw them all up (cause not
+established; the 3-of-5 rule absorbs a single blip like this).
+
 ## License
 
 GPL-2.0-only. The full text is in `LICENSE`.

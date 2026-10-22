@@ -1,0 +1,31 @@
+#!/usr/bin/env python3
+"""Stand-in for fleet-check. Each call takes the next line of $FAKE_SEQ.
+
+A line is comma-separated engine=status pairs (for example "glm=down,deepseek=ok"),
+or the word CRASH (prints garbage, exits 3), or HANG-free "EMPTY" (no output, exit 1).
+It records its arguments in $FAKE_SEQ.args so the tests can check what was asked.
+"""
+import json
+import os
+import sys
+
+seq = os.environ["FAKE_SEQ"]
+counter = seq + ".n"
+n = int(open(counter).read()) if os.path.exists(counter) else 0
+lines = [ln.strip() for ln in open(seq) if ln.strip()]
+line = lines[min(n, len(lines) - 1)]
+open(counter, "w").write(str(n + 1))
+open(seq + ".args", "a").write(" ".join(sys.argv[1:]) + "\n")
+
+if line == "CRASH":
+    print("Traceback: boom")
+    sys.exit(3)
+if line == "EMPTY":
+    sys.exit(1)
+engines = []
+for pair in line.split(","):
+    name, status = pair.split("=")
+    engines.append({"engine": name, "status": status,
+                    "problems": [] if status == "ok" else [f"health: {status} password=hunter2hunter2"]})
+print(json.dumps({"engines": engines}))
+sys.exit(0 if all(e["status"] == "ok" for e in engines) else 1)

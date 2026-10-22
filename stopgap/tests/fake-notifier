@@ -1,0 +1,4 @@
+#!/bin/sh
+# Records each notification as "TITLE | BODY" in $FAKE_NOTES; fails if $FAKE_NOTIFY_FAIL is a file that exists.
+[ -n "$FAKE_NOTIFY_FAIL" ] && [ -e "$FAKE_NOTIFY_FAIL" ] && exit 1
+printf '%s | %s\n' "$1" "$2" >> "$FAKE_NOTES"
