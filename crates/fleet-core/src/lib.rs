@@ -9,6 +9,8 @@
 //! belong to later slices and are deliberately not declared here.
 
 pub mod http;
+pub mod kinds_rest;
+pub mod opts;
 pub mod registry;
 pub mod result;
 

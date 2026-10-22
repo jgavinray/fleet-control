@@ -39,6 +39,8 @@ pub struct EngineConfig {
     pub health_path: Option<String>,
     /// Prometheus bridge URL, when the engine has one.
     pub exporter_url: Option<String>,
+    /// lfm2d read mode as written in the registry; "specs" when absent.
+    pub read: String,
     /// True when other people use the engine, so sanity is skipped while busy.
     pub shared: bool,
     /// What we believe the engine supports: feature -> "yes" | "no".
@@ -61,6 +63,16 @@ impl EngineConfig {
     /// The URL to hand `Client::new`: Python strips trailing slashes there.
     pub fn base_url(&self) -> &str {
         self.url.trim_end_matches('/')
+    }
+
+    /// The lfm2d read mode: Python's `cfg.get("read", "specs")`. Anything
+    /// other than "specs" takes the span-scan path.
+    pub fn read(&self) -> &str {
+        if self.read.is_empty() {
+            "specs"
+        } else {
+            &self.read
+        }
     }
 
     /// The expected result for a feature, if the registry judges it.
@@ -183,6 +195,11 @@ pub fn parse_registry(text: &str) -> Result<Registry, toml::de::Error> {
                     host: string("host"),
                     health_path: non_empty("health_path"),
                     exporter_url: non_empty("exporter_url"),
+                    read: entry
+                        .get("read")
+                        .and_then(toml::Value::as_str)
+                        .unwrap_or("specs")
+                        .to_string(),
                     shared: entry
                         .get("shared")
                         .and_then(toml::Value::as_bool)
@@ -369,4 +386,23 @@ pub fn default_registry_path() -> PathBuf {
         }
     }
     PathBuf::from(REGISTRY_FILE)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn read_mode_defaults_and_parses() {
+        let default = EngineConfig::default();
+        assert_eq!(default.read(), "specs", "no read key means specs");
+
+        let registry = parse_registry(
+            "[engines.specs]\nkind = \"lfm2d\"\nmodel = \"m\"\n\n\
+             [engines.spans]\nkind = \"lfm2d\"\nmodel = \"m\"\nread = \"spans\"\n",
+        )
+        .expect("parse registry");
+        assert_eq!(registry.engine("specs").expect("specs").read(), "specs");
+        assert_eq!(registry.engine("spans").expect("spans").read(), "spans");
+    }
 }
