@@ -1,1 +1,4 @@
 __pycache__/
+# Cargo build dir at any depth. No trailing slash: a directory-only pattern
+# cannot match the nested target paths, which never exist in a workspace.
+target

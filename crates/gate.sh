@@ -10,7 +10,8 @@
 #      mode, tensorfold plus the laya, lfm2d and jev-glm kinds, exit code,
 #      engine order, the 14-field comparable projection and whole feature
 #      objects; any stderr on a normal run fails
-#   3. changes nothing outside crates/ (checked against the merge-base)
+#   3. changes nothing outside crates/ (checked against the merge-base),
+#      apart from the root .gitignore, which the ignore check below depends on
 #
 # No live engine is ever contacted: the parity harness serves mock engines on
 # loopback only. The Python tool stays ground truth and is never modified.
@@ -56,18 +57,25 @@ done
 
 python3 -I "$HERE/parity.py" "$ROOT/check/fleet_check.py" "$BIN" || bad "parity with the Python fleet-check failed"
 
+# No build artifacts committable. The root .gitignore must carry a `target`
+# pattern without a trailing slash: a directory-only pattern cannot match a
+# path that does not exist, and the nested target dirs never do in a workspace.
 for t in "$ROOT/target" "$ROOT/$BINCRATE/target" "$ROOT/$CORE/target"; do
-  git check-ignore -q "$t" || bad "$t is not git-ignored (add target/ to .gitignore)"
+  git check-ignore -q "$t" || bad "$t is not git-ignored (add target to the root .gitignore)"
 done
 
-base=$(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD main 2>/dev/null || git rev-parse HEAD)
+# Diff against the branch point on local main. origin/main can lag main, and
+# an origin/main-first base would flag already-merged main work (the workspace
+# Cargo.toml/Cargo.lock) as out-of-scope changes of the branch under test.
+base=$(git merge-base HEAD main 2>/dev/null || git merge-base HEAD origin/main 2>/dev/null || git rev-parse HEAD)
 # Scope: committed or uncommitted work against the merge-base. Only the new
 # crates may change; the Python tool, fleet.toml and everything else stay as
-# they are. The gate itself and parity.py live under crates/ and are allowed.
+# they are. The gate itself and parity.py live under crates/ and are allowed,
+# as is the root .gitignore the ignore check above depends on.
 changed=$( { git diff --name-only "$base"; git ls-files --others --exclude-standard; } | sort -u)
 for f in $changed; do
   case "$f" in
-    crates/*) ;;
+    crates/*|.gitignore) ;;  # .gitignore: the ignore check above depends on it
     *) bad "file outside crates/ changed: $f" ;;
   esac
 done
