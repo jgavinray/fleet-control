@@ -8,6 +8,7 @@
 //! Modules `probes` and `kinds` (the feature probes and the per-kind checks)
 //! belong to later slices and are deliberately not declared here.
 
+pub mod check_engine;
 pub mod http;
 pub mod kinds_rest;
 pub mod kinds_tensorfold;
