@@ -1,0 +1,12 @@
+[package]
+name = "fleet-core"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "Registry, HTTP client and result record shared by fleet-check-rs"
+publish = false
+
+[dependencies]
+serde_json.workspace = true
+toml.workspace = true
+ureq.workspace = true

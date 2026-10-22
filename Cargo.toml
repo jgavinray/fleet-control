@@ -1,0 +1,17 @@
+# Workspace root for the Rust port of fleet-check. fleet.toml sits beside this
+# file and stays the single source of truth for engines and hosts.
+#
+# Only the library crate is a member today. crates/fleet-check-rs (the binary)
+# is added by a later slice; it must not be listed here until it exists.
+[workspace]
+resolver = "2"
+members = ["crates/fleet-core"]
+
+[workspace.package]
+edition = "2021"
+license = "GPL-2.0-only"
+
+[workspace.dependencies]
+serde_json = "1"
+toml = "1"
+ureq = { version = "3.4.2", default-features = false }
