@@ -9,6 +9,9 @@
 //! belong to later slices and are deliberately not declared here.
 
 pub mod http;
+pub mod kinds_tensorfold;
+pub mod opts;
+pub mod probes;
 pub mod registry;
 pub mod result;
 
