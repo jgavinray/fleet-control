@@ -152,6 +152,39 @@ def scen():
     s["jev_model_mismatch"] = dict(engine={"kind": "jev-glm"}, health=(200, {"ok": True, "model": MODEL}),
                                    ready=(200, {"status": "ok"}),
                                    systemone=(200, {"answers": {"verdict": {"choice": "read"}}, "model": "Other"}))
+
+    # --- the edge cases the fleet-check alignment pinned; if these drift the
+    # old behaviour is back ---
+    # A shared engine whose health reports an integral float: the counter is
+    # still truthy, so quick and full mode both report skipped-busy instead of
+    # probing (the regression used to get probed).
+    s["shared_float_busy"] = dict(engine={"shared": True}, health=(200, dict(healthy, requests_running=1.0)),
+                                  chat=lambda b: (200, OK_CHAT))
+    # model_ids that is not a list of strings. The string form is a character
+    # sequence: ids[0] is "M" and the registry model passes because
+    # "M-1" in "M-1" is a substring hit. The dict form dies on ids[0] and the
+    # int form dies in the wrong-model message join -- both uncaught (exit 1,
+    # a traceback on stderr, no stdout), which the usage-style compare covers.
+    s["model_ids_string"] = dict(health=(200, dict(healthy, model_ids=MODEL)), chat=lambda b: (200, OK_CHAT))
+    s["model_ids_object"] = dict(health=(200, dict(healthy, model_ids={"a": 1})), chat=lambda b: (200, OK_CHAT))
+    s["model_ids_int"] = dict(engine={"model": "5"}, health=(200, dict(healthy, model_ids=[5])),
+                              chat=lambda b: (200, OK_CHAT))
+    # A sanity reply with a body that is not valid UTF-8: status 200, but the
+    # sanity answer is unreadable, so the result is a sanity failure, not a
+    # transport error.
+    s["sanity_raw_bytes"] = dict(health=(200, healthy), chat_raw=b"\x80\x81\x82 not json")
+    # expected_features may pin a raw number: 1 on a healthy engine is drift
+    # (exit 2), and the features map carries expected: 1 as a number.
+    s["expected_logprobs_one"] = dict(engine={"expected_features": {"logprobs": 1}}, health=(200, healthy),
+                                      chat=ideal_chat, completions=ideal_plp)
+    # A string "false" is truthy: a busy engine is still skipped as shared.
+    s["shared_string_false"] = dict(engine={"shared": "false"}, health=(200, dict(healthy, requests_running=2)),
+                                    chat=lambda b: (200, OK_CHAT))
+    # read = "" is not "specs", so the spans endpoint is probed; health_path =
+    # "" requests the base URL, which only this mock serves (no /health route).
+    s["read_empty"] = dict(engine={"kind": "lfm2d", "read": ""}, models=(200, [{"id": MODEL}]),
+                           spans=(200, [[{"text": "sk-1", "start": 0, "end": 5}]]))
+    s["health_path_empty"] = dict(engine={"health_path": ""}, root=(200, healthy), chat=lambda b: (200, OK_CHAT))
     return s
 
 
@@ -175,8 +208,17 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def _send_bytes(self, status, data):
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
     def do_GET(self):
         sc = self.server.sc
+        if self.path == "/":
+            return self._send(*sc["root"]) if "root" in sc else self._send(404, {"error": "no route"})
         if self.path == "/health":
             return self._send(*sc["health"]) if "health" in sc else self._send(404, {"error": "no route"})
         if self.path == "/v1/models":
@@ -194,6 +236,8 @@ class Handler(BaseHTTPRequestHandler):
         body = json.loads(self.rfile.read(n) or b"{}")
         sc = self.server.sc
         if self.path == "/v1/chat/completions":
+            if "chat_raw" in sc:  # a body that is not valid UTF-8, sent verbatim
+                return self._send_bytes(200, sc["chat_raw"])
             if "chat" not in sc:
                 return self._send(404, {"error": "no route"})
             return self._send(*sc["chat"](body))
@@ -241,6 +285,8 @@ for name, sc in scen().items():
 def toml_value(v):
     if isinstance(v, bool):
         return "true" if v else "false"
+    if isinstance(v, int):  # expected_features may pin a raw number
+        return str(v)
     if isinstance(v, str):
         return json.dumps(v)
     raise TypeError(v)
@@ -260,6 +306,22 @@ for name in sorted(engines):
 tmp = tempfile.mkdtemp(prefix="fleetparity-")
 reg = tmp + "/fleet.toml"
 open(reg, "w").write("\n".join(lines))
+
+# A second fixture per malformed registry shape: engines that is not a table,
+# an engine entry that is a string, an engine without url, an engine without
+# model. The Python tool dies uncaught on each (exit 1, traceback on stderr,
+# no stdout) and the Rust tool rejects the file at load; the usage-style
+# compare covers both.
+bad_regs = {}
+for name, content in {
+    "engines-not-a-table": "engines = 5\n",
+    "engine-entry-is-a-string": 'engines = { bad = "hello" }\n',
+    "engine-without-url": '[engines.nourl]\nmodel = "M-1"\nhost = "h"\n',
+    "engine-without-model": '[engines.nomodel]\nurl = "http://127.0.0.1:1"\nhost = "h"\nkind = "tensorfold"\n',
+}.items():
+    path = os.path.join(tmp, f"bad-{name}.toml")
+    open(path, "w").write(content)
+    bad_regs[name] = path
 
 problems = []
 n_compared = 0
@@ -321,6 +383,22 @@ def compare(label, args, cwd=None, env_reg=None):
             problems.append(f"{label}: engine {a.get('engine')} differs (python, rust): {diff}")
 
 
+def compare_help(label, args):
+    """A run that prints help and exits 0 (argparse ignores a value attached to
+    -h). The usage text itself is compared: the Rust port carries it verbatim."""
+    global n_compared
+    n_compared += 1
+    pc, po, pe = run([sys.executable, "-I", PY] if PY.endswith(".py") else [PY], args)
+    rc, ro, re_ = run([RS], args)
+    if pc != rc:
+        problems.append(f"{label}: exit code python={pc} rust={rc} (rust stderr: {re_.strip()[:200]})")
+    elif po != ro:
+        problems.append(f"{label}: help text differs (python {len(po)} bytes, rust {len(ro)} bytes)")
+    elif pe.strip() or re_.strip():
+        problems.append(f"{label}: help run wrote to stderr "
+                        f"(python: {pe.strip()[:120]!r}, rust: {re_.strip()[:120]!r})")
+
+
 # ---- --quick --json: the ancestor coverage, verbatim ----
 compare("all engines", ["--quick", "--json", "--registry", reg])
 for name in sorted(engines):
@@ -353,6 +431,22 @@ for name in sorted(engines):
     compare(f"engine {name}, full mode", ["--json", "--registry", reg, name])
 compare("down and drift combined (exit 1 wins)", ["--json", "--registry", reg, "not_ok", "lp_drift"])
 compare("--force-shared, full mode", ["--json", "--force-shared", "--registry", reg, "shared_busy"])
+
+# ---- the edge cases the fleet-check alignment pinned ----
+# A non-finite --timeout makes every request fail, so the engine is down after
+# one request; both tools agree (the Python client's socket layer refuses an
+# infinite timestamp, the Rust client refuses the deadline itself).
+compare("--timeout inf (a non-finite timeout fails the request)",
+        ["--quick", "--json", "--registry", reg, "--timeout", "inf", "9lives"])
+compare("--timeout 1e400 (overflows to infinity, same shape)",
+        ["--quick", "--json", "--registry", reg, "--timeout", "1e400", "9lives"])
+# An explicit argument on a flag that takes none is a usage error: exit 1, the
+# usage block and the message on stderr, nothing on stdout.
+compare("--help=x (explicit argument on a flag that takes none)", ["--help=x"])
+compare("-h=foo (same, short form)", ["-h=foo"])
+compare_help("-hfoo (an attached value is ignored, help is printed)", ["-hfoo"])
+for name, path in bad_regs.items():
+    compare(f"malformed registry: {name.replace('-', ' ')}", ["--quick", "--json", "--registry", path])
 
 hold.close()
 for srv in servers:
