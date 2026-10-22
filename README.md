@@ -210,6 +210,42 @@ The tests cover a healthy engine, a down engine (exit 1), feature drift
 and the shape of `fleet.toml`. They do **not** touch the real fleet; the
 real check is running `fleet-check`.
 
+## The Rust workspace (fleet-core and fleet-check-rs)
+
+The repo root is also a cargo workspace: `crates/fleet-core` is the library
+(the registry loader with the local LAN override, the counting HTTP client,
+the result and verdict types, the per-kind engine checks and the feature
+probes), and `crates/fleet-check-rs` is the same tool as `check/fleet_check.py`
+as a compiled binary.
+
+**Status.** The port is additive and is not installed anywhere. The `ln -sfn`
+install above still points at the Python launcher; the Python tool remains the
+operating tool until the owner rules on a cutover. Nothing in `stopgap/` or
+`agents/` changes.
+
+**Build, test, gate.** From the repo root:
+
+```
+cargo build --release      # binary at target/release/fleet-check-rs
+cargo test
+bash crates/gate.sh
+```
+
+The gate builds in release mode, requires at least 8 tests per crate, runs
+`cargo clippy --all-targets -- -D warnings` and `cargo fmt --check`, then runs
+`crates/parity.py`: a 127-comparison mock-engine harness that runs the Python
+and Rust tools side by side on loopback and compares exit codes, engine order
+and the comparable JSON fields (any stderr on a normal run fails). No live
+engine is contacted.
+
+**Parity.** The Rust tool matches the Python on every scenario in
+`crates/parity.py`. Message wording may differ; counts, fields and exit codes
+do not.
+
+**Requirements.** A Rust toolchain (the port is built with 1.92); `serde_json`,
+`toml` and `ureq` are fetched from crates.io on the first build. The Python
+side stays Python 3.11+ standard-library only.
+
 ## Caveats
 
 - Silent ignore versus real support for `priority: "background"` cannot be
