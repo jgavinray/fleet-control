@@ -1,4 +1,4 @@
-"""fleet-check: is every model engine in fleet/fleet.toml up and behaving?
+"""fleet-check: is every model engine in fleet.toml up and behaving?
 
 Standard library only (Python 3.11+ for tomllib).
 
@@ -663,7 +663,7 @@ def main(argv=None, out=None):
     out = out or sys.stdout
     ap = Parser(
         prog="fleet-check",
-        description="Check that every model engine in fleet/fleet.toml is up and behaving.",
+        description="Check that every model engine in fleet.toml is up and behaving.",
         epilog="Exit 0 all good, 1 an engine is down or wrong, 2 only feature drift.",
     )
     ap.add_argument("engine", nargs="*", help="engine name(s) to check (default: all)")

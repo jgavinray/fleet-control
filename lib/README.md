@@ -10,14 +10,14 @@ written their own copy of:
    with engine addresses from `fleetlib.registry`).
 
 Python 3.11 or newer. Standard library only. Nothing to install: put
-`fleet/lib` on `PYTHONPATH`.
+`lib` on `PYTHONPATH`.
 
 ```
-export PYTHONPATH=~/dev/mission-control/fleet/lib
+export PYTHONPATH=~/dev/fleet-control/lib
 python3 -m fleetlib.redact < in.txt > out.txt
 ```
 
-Run the tests with `fleet/lib/test.sh` (see "The gate" at the end).
+Run the tests with `lib/test.sh` (see "The gate" at the end).
 
 ## fleetlib.redact: mask secrets
 
@@ -206,8 +206,8 @@ prints JSON.
 
 `fleetlib.registry` finds engines in this order:
 
-1. **`fleet/fleet.toml`** (next to this library; or the file named by
-   `$FLEET_TOML`; or `~/dev/mission-control/fleet/fleet.toml`). It is the
+1. **`fleet.toml`** (next to this library; or the file named by
+   `$FLEET_TOML`; or `~/dev/fleet-control/fleet.toml`). It is the
    registry that `fleet-check` reads. From each `[engines.NAME]` table the
    library uses `url`, `model`, `kind`, `shared` and
    `expected_features.guided_choice`: `kind` `laya` or `jev-glm` means
@@ -245,7 +245,7 @@ workers are using them.
 
 ## The gate
 
-`fleet/lib/test.sh` exits non-zero on any failure. It runs:
+`lib/test.sh` exits non-zero on any failure. It runs:
 
 1. the `unittest` suites: `tests/test_redact.py` (a positive and a negative
    case per rule, PEM, JSON and YAML forms, prose and shell commands that must
@@ -256,7 +256,7 @@ workers are using them.
 2. `tests/mutation_check.py`: removes each redact rule in turn and requires the
    redact suite to fail;
 3. `tests/repo_clean.py`: runs the library's own redactor over every file in
-   `fleet/lib` and fails on any secret-shaped value that is not on a short list
+   `lib` and fails on any secret-shaped value that is not on a short list
    of made-up ones.
 
 What it does not cover: the live engines (the tests use a stub; a real call is

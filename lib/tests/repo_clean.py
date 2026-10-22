@@ -1,4 +1,4 @@
-"""Run the library's own redactor over every text file under fleet/lib.
+"""Run the library's own redactor over every text file under lib.
 
 Tier 1, every file: the high-confidence rules (private key blocks, GitHub,
 Hugging Face, sk-, AWS, Slack and Google keys, JWTs, bearer and basic auth,

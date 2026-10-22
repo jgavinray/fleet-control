@@ -539,7 +539,7 @@ class CliTests(Base):
 
 
 class RegistryTests(unittest.TestCase):
-    """The real fleet/fleet.toml must be well formed."""
+    """The real fleet.toml must be well formed."""
 
     @classmethod
     def setUpClass(cls):

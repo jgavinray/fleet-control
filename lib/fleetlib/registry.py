@@ -2,9 +2,9 @@
 
 Two sources, in this order:
 
-1. the registry file ``fleet/fleet.toml`` (found next to this library in the
-   mission-control checkout, or at ``$FLEET_TOML``, or at
-   ``~/dev/mission-control/fleet/fleet.toml``), if it exists and lists the engine;
+1. the registry file ``fleet.toml`` (found next to this library in the
+   fleet-control checkout, or at ``$FLEET_TOML``, or at
+   ``~/dev/fleet-control/fleet.toml``), if it exists and lists the engine;
 2. the built-in defaults below (the addresses in use on 10/20/2026).
 
 A registry entry only needs to say what differs from the default, so an entry
@@ -90,8 +90,8 @@ def default_path() -> Optional[Path]:
     env = os.environ.get("FLEET_TOML")
     if env:
         return Path(env)
-    for p in (Path(__file__).resolve().parents[2] / "fleet.toml",  # fleet/lib/fleetlib/ -> fleet/fleet.toml
-              Path.home() / "dev" / "mission-control" / "fleet" / "fleet.toml"):
+    for p in (Path(__file__).resolve().parents[2] / "fleet.toml",  # lib/fleetlib/ -> fleet.toml
+              Path.home() / "dev" / "fleet-control" / "fleet.toml"):
         if p.is_file():
             return p
     return None

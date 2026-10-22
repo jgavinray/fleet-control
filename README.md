@@ -1,4 +1,22 @@
-# fleet: the registry and fleet-check
+# fleet-control: the fleet registry, fleet-check and the fleet-worker agent
+
+This repository was split out of `mission-control` (its former `fleet/`
+directory, with history) on 10/22/2026. `lib/` is the shared Python library
+(`fleetlib`) and `agents/` holds the `fleet-worker` agent definition and its
+installer; both have their own README.
+
+## Install
+
+```
+git clone git@github.com:jgavinray/fleet-control.git ~/dev/fleet-control
+ln -sfn ~/dev/fleet-control/check/fleet-check ~/.local/bin/fleet-check
+~/dev/fleet-control/agents/install.sh      # links ~/.claude/agents/fleet-worker.md
+```
+
+Tests: `check/test.sh` and `lib/test.sh` (Python 3.11 or newer, standard
+library only).
+
+## The registry and fleet-check
 
 Two things live here.
 
@@ -21,7 +39,7 @@ fleet-check --json          # machine-readable output
 fleet-check --force-shared  # also test a shared engine that is busy (see below)
 ```
 
-`~/.local/bin/fleet-check` is a symlink to `fleet/check/fleet-check` in this
+`~/.local/bin/fleet-check` is a symlink to `check/fleet-check` in this
 repo. It needs Python 3.11 or newer and nothing else.
 
 ### Reading the output
@@ -139,7 +157,7 @@ each field means. Rules:
    a feature you have no opinion on; it is measured and shown but never
    flagged). Run it again; it should exit 0.
 4. If the engine is shared with other people, add `shared = true`.
-5. Run `fleet/check/test.sh`. It checks the file is well formed.
+5. Run `check/test.sh`. It checks the file is well formed.
 
 Kinds:
 
@@ -150,14 +168,14 @@ Kinds:
 | `lfm2d` | `health_path` (`/v1/models`); optional `exporter_url` | `read = "specs"` or `"spans"` |
 | `jev-glm` | `/health` and `/ready` | one `/v1/systemone` decision |
 
-A new kind needs a new function in `fleet/check/fleet_check.py` and an entry
+A new kind needs a new function in `check/fleet_check.py` and an entry
 in `CHECKS`.
 
 ## Testing fleet-check itself
 
 ```
-fleet/check/test.sh             # unit tests against stub HTTP servers; about a second
-fleet/check/test.sh --selftest  # also breaks a copy of the code on purpose and
+check/test.sh             # unit tests against stub HTTP servers; about a second
+check/test.sh --selftest  # also breaks a copy of the code on purpose and
                                 # requires the tests to go red
 ```
 

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Gate for fleet-check. One command, non-zero on any failure.
 #
-#   fleet/check/test.sh              run the unit tests (stub HTTP servers, no real fleet)
-#   fleet/check/test.sh --selftest   also prove the tests can fail: break a copy of the
+#   check/test.sh              run the unit tests (stub HTTP servers, no real fleet)
+#   check/test.sh --selftest   also prove the tests can fail: break a copy of the
 #                                    code on purpose and require the tests to go red
 #
-# Covers: logic of the checker and the shape of fleet/fleet.toml.
+# Covers: logic of the checker and the shape of fleet.toml.
 # Does NOT cover: the real engines. For that, run `fleet-check` itself.
 set -euo pipefail
 

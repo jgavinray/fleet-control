@@ -381,7 +381,7 @@ class Registry(unittest.TestCase):
         self.assertEqual((reg["laya"].method, reg["laya"].url, reg["laya"].model), ("systemone", "http://l.test:3", "laya-x"))
         self.assertNotIn("lfm2d-8b", reg)
 
-    @unittest.skipUnless((Path(__file__).resolve().parents[2] / "fleet.toml").is_file(), "no fleet/fleet.toml in this checkout")
+    @unittest.skipUnless((Path(__file__).resolve().parents[2] / "fleet.toml").is_file(), "no fleet.toml in this checkout")
     def test_the_real_registry_file_agrees_with_the_defaults_on_how_to_ask(self):
         reg = load_registry(Path(__file__).resolve().parents[2] / "fleet.toml")
         for name, d in DEFAULTS.items():
