@@ -175,3 +175,7 @@ real check is running `fleet-check`.
   DeepSeek do not expose it over HTTP).
 - The check cannot see inside a machine. For supervisors, logs and restarts,
   use the unit named in `fleet.toml` and the llm-watchdog on hyper01.
+
+## License
+
+GPL-2.0-only. The full text is in `LICENSE`.
