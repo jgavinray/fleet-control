@@ -4,9 +4,6 @@
 //! engine check needs: the registry loader, the counting HTTP client, the result
 //! record, and the small helpers the checks share (health shape, load string,
 //! sanity answer).
-//!
-//! Modules `probes` and `kinds` (the feature probes and the per-kind checks)
-//! belong to later slices and are deliberately not declared here.
 
 pub mod check_engine;
 pub mod http;
@@ -20,7 +17,7 @@ pub mod result;
 pub use http::{Client, Resp};
 pub use registry::{
     apply_local_address, load_local_addresses, load_registry, load_registry_with, parse_registry,
-    EngineConfig, Registry, RegistryError,
+    EngineConfig, Registry, RegistryError, RegistryParseError,
 };
 pub use result::{exit_code, round3, CheckResult, Feature, Sanity, Status};
 
@@ -40,31 +37,128 @@ pub fn health_up(j: &Value) -> bool {
     }
 }
 
+/// Python truthiness: null, false, zero, the empty string, and empty
+/// containers are falsy; everything else is truthy.
+pub fn py_truthy(v: &Value) -> bool {
+    match v {
+        Value::Null => false,
+        Value::Bool(b) => *b,
+        Value::Number(n) => n.as_f64().is_some_and(|f| f != 0.0),
+        Value::String(s) => !s.is_empty(),
+        Value::Array(a) => !a.is_empty(),
+        Value::Object(o) => !o.is_empty(),
+    }
+}
+
+/// Python's `str()` for the shapes a health body or a reply carries. Strings
+/// stay bare; containers render the way `str()` renders them, which is `repr`.
+pub fn py_str(v: &Value) -> String {
+    match v {
+        Value::String(s) => s.clone(),
+        Value::Null => "None".to_string(),
+        Value::Bool(true) => "True".to_string(),
+        Value::Bool(false) => "False".to_string(),
+        Value::Number(n) => n.to_string(),
+        Value::Array(_) | Value::Object(_) => py_repr(v),
+    }
+}
+
+/// Python's `repr()` for a string: the quote Python would pick, with the
+/// escapes it would use. Feature reasons are compared verbatim by the gate.
+pub fn py_repr_str(s: &str) -> String {
+    let quote = if s.contains('\'') && !s.contains('"') {
+        '"'
+    } else {
+        '\''
+    };
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push(quote);
+    for c in s.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if c == quote => {
+                out.push('\\');
+                out.push(c);
+            }
+            c if (c as u32) < 0x20 || c as u32 == 0x7f => {
+                out.push_str(&format!("\\x{:02x}", c as u32));
+            }
+            c => out.push(c),
+        }
+    }
+    out.push(quote);
+    out
+}
+
+/// Python's `repr()` for the values a choice can hold.
+pub fn py_repr(v: &Value) -> String {
+    match v {
+        Value::Null => "None".to_string(),
+        Value::Bool(true) => "True".to_string(),
+        Value::Bool(false) => "False".to_string(),
+        Value::Number(n) => n.to_string(),
+        Value::String(s) => py_repr_str(s),
+        Value::Array(items) => format!(
+            "[{}]",
+            items.iter().map(py_repr).collect::<Vec<_>>().join(", ")
+        ),
+        Value::Object(map) => format!(
+            "{{{}}}",
+            map.iter()
+                .map(|(key, value)| format!("{}: {}", py_repr_str(key), py_repr(value)))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+    }
+}
+
 /// `(text, in-flight count)` from whichever counters the health body exposes:
 /// `requests_running` / `requests_waiting`, falling back to
 /// `live.connections` / `live.waiting`. Empty text and 0 when the body exposes
 /// neither.
-pub fn describe_load(h: &Value) -> (String, u64) {
+///
+/// The counters are kept raw, as Python keeps them: a negative counter still
+/// means busy and prints with its sign, and `1.0` prints as `1.0`. Python adds
+/// the two raw values, so the count is an `f64` here; the callers only use its
+/// truthiness.
+pub fn describe_load(h: &Value) -> (String, f64) {
     let Some(obj) = h.as_object() else {
-        return (String::new(), 0);
+        return (String::new(), 0.0);
     };
     let live = obj.get("live").and_then(Value::as_object);
 
     let running = counter(obj, live, "requests_running", "connections");
     let waiting = counter(obj, live, "requests_waiting", "waiting");
     if running.is_none() && waiting.is_none() {
-        return (String::new(), 0);
+        return (String::new(), 0.0);
     }
 
-    let running = running.unwrap_or(0);
-    let waiting = waiting.unwrap_or(0);
-    if running != 0 || waiting != 0 {
+    let running = normalized(running.unwrap_or(Value::Null));
+    let waiting = normalized(waiting.unwrap_or(Value::Null));
+    if py_truthy(&running) || py_truthy(&waiting) {
         (
-            format!("busy ({running} running, {waiting} waiting)"),
-            running + waiting,
+            format!(
+                "busy ({} running, {} waiting)",
+                py_str(&running),
+                py_str(&waiting)
+            ),
+            counter_value(&running) + counter_value(&waiting),
         )
     } else {
-        ("idle".to_string(), 0)
+        ("idle".to_string(), 0.0)
+    }
+}
+
+/// Python's `value or 0`: a falsy counter becomes the integer 0, which prints
+/// as "0".
+fn normalized(value: Value) -> Value {
+    if py_truthy(&value) {
+        value
+    } else {
+        Value::from(0)
     }
 }
 
@@ -73,12 +167,17 @@ fn counter(
     live: Option<&Map<String, Value>>,
     key: &str,
     live_key: &str,
-) -> Option<u64> {
-    let number = |value: Option<&Value>| -> Option<u64> {
-        let value = value.filter(|value| !value.is_null())?;
-        Some(value.as_u64().unwrap_or(0))
-    };
-    number(obj.get(key)).or_else(|| number(live.and_then(|live| live.get(live_key))))
+) -> Option<Value> {
+    let present = |value: Option<&Value>| value.filter(|value| !value.is_null()).cloned();
+    present(obj.get(key)).or_else(|| present(live.and_then(|live| live.get(live_key))))
+}
+
+fn counter_value(value: &Value) -> f64 {
+    match value {
+        Value::Bool(true) => 1.0,
+        Value::Bool(false) => 0.0,
+        other => other.as_f64().unwrap_or(0.0),
+    }
 }
 
 /// Python's `re.fullmatch(r"\W*42\W*", text)`: the answer is 42, with only
@@ -96,4 +195,30 @@ pub fn sanity_answer_ok(text: &str) -> bool {
 /// Python's `\w`: alphanumeric (Unicode) or underscore.
 fn is_word_char(c: char) -> bool {
     c.is_alphanumeric() || c == '_'
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn python_repr_quotes_and_escapes() {
+        assert_eq!(py_repr_str("apple"), "'apple'");
+        assert_eq!(py_repr_str("it's"), "\"it's\"");
+        assert_eq!(py_repr_str("a'b\"c"), "'a\\'b\"c'");
+        assert_eq!(py_repr_str("line\nbreak\t"), "'line\\nbreak\\t'");
+        assert_eq!(py_repr_str(""), "''");
+    }
+
+    #[test]
+    fn py_repr_handles_non_string_choices() {
+        assert_eq!(py_repr(&json!("say \"hi\"")), "'say \"hi\"'");
+        assert_eq!(py_repr(&json!(5)), "5");
+        assert_eq!(py_repr(&json!(1.5)), "1.5");
+        assert_eq!(py_repr(&json!(null)), "None");
+        assert_eq!(py_repr(&json!(true)), "True");
+        assert_eq!(py_repr(&json!(["a'b", 2])), "[\"a'b\", 2]");
+        assert_eq!(py_repr(&json!({"k": "v"})), "{'k': 'v'}");
+    }
 }

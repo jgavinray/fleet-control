@@ -14,7 +14,7 @@ use crate::opts::Opts;
 use crate::probes::{self, chat_body, chat_text, record_feature, BgSender, SANITY_PROMPT};
 use crate::registry::EngineConfig;
 use crate::result::{round3, CheckResult, Sanity, Status};
-use crate::{describe_load, health_up, sanity_answer_ok};
+use crate::{describe_load, health_up, py_str, py_truthy, sanity_answer_ok};
 
 /// The four features a TensorFold engine is probed for, in Python's order.
 pub const FEATURES: [&str; 4] = [
@@ -47,33 +47,95 @@ pub fn check_tensorfold(res: &mut CheckResult, cfg: &EngineConfig, c: &mut Clien
         return;
     }
     let (load, in_flight) = describe_load(&hj);
-    let busy = in_flight > 0;
+    let busy = in_flight != 0.0;
     res.load = load;
     res.version = version_string(hj.get("version"));
 
     let ids = match hj.get("model_ids") {
-        Some(Value::Array(items)) if !items.is_empty() => {
-            Some(items.iter().map(id_string).collect::<Vec<String>>())
-        }
+        Some(value) if py_truthy(value) => value.clone(),
         _ => {
             let m = c.get("/v1/models");
             if !m.ok() {
                 res.fail(Status::Down, format!("model list: {}", m.why(110)));
                 return;
             }
-            model_ids(&m)
+            match model_ids(&m) {
+                Some(ids) => Value::Array(ids),
+                None => {
+                    res.fail(Status::Wrong, "model list has no data[].id");
+                    return;
+                }
+            }
         }
     };
-    let Some(ids) = ids else {
-        res.fail(Status::Wrong, "model list has no data[].id");
-        return;
+
+    // Python: `res.model = ids[0] if ids else ""`. A string is a sequence of
+    // characters, an array's first element is kept raw, and a dict or a
+    // number raises uncaught (KeyError/TypeError) before anything is reported.
+    let model_value = match &ids {
+        Value::String(s) => {
+            Value::String(s.chars().next().map(|c| c.to_string()).unwrap_or_default())
+        }
+        Value::Array(items) => items
+            .first()
+            .cloned()
+            .unwrap_or(Value::String(String::new())),
+        Value::Object(_) => {
+            res.fatal = Some("KeyError: 0".to_string());
+            return;
+        }
+        Value::Number(_) => {
+            res.fatal = Some("TypeError: 'int' object is not subscriptable".to_string());
+            return;
+        }
+        Value::Bool(_) => {
+            res.fatal = Some("TypeError: 'bool' object is not subscriptable".to_string());
+            return;
+        }
+        Value::Null => Value::String(String::new()),
     };
-    res.model = ids.first().cloned().unwrap_or_default();
-    if !ids.iter().any(|id| id == model) {
-        let joined = if ids.is_empty() {
+    res.model = py_str(&model_value);
+
+    // Python: `model not in ids` on the raw value (a substring test for a
+    // string, raw equality for an array).
+    let present = match &ids {
+        Value::String(s) => s.contains(model),
+        Value::Array(items) => items
+            .iter()
+            .any(|item| item == &Value::String(model.to_string())),
+        _ => false,
+    };
+    if !present {
+        // Python: `', '.join(ids) or 'none'`; a non-string item raises
+        // uncaught TypeError.
+        let joined = match &ids {
+            Value::String(s) => s
+                .chars()
+                .map(|c| c.to_string())
+                .collect::<Vec<_>>()
+                .join(", "),
+            Value::Array(items) => {
+                let mut parts = Vec::with_capacity(items.len());
+                for (index, item) in items.iter().enumerate() {
+                    match item {
+                        Value::String(s) => parts.push(s.clone()),
+                        other => {
+                            res.fatal = Some(format!(
+                                "TypeError: sequence item {index}: expected str instance, {} found",
+                                py_type_name(other)
+                            ));
+                            return;
+                        }
+                    }
+                }
+                parts.join(", ")
+            }
+            _ => String::new(),
+        };
+        let joined = if joined.is_empty() {
             "none".to_string()
         } else {
-            ids.join(", ")
+            joined
         };
         res.fail(
             Status::Wrong,
@@ -103,7 +165,8 @@ pub fn check_tensorfold(res: &mut CheckResult, cfg: &EngineConfig, c: &mut Clien
 
     // The sanity question carries priority:"background" when the registry says
     // the engine accepts it. A 4xx then means it refuses it, so retry plain.
-    let want_bg = cfg.expected("background_priority") == Some("yes");
+    let want_bg =
+        matches!(cfg.expected("background_priority"), Some(Value::String(s)) if s == "yes");
     let plain_body = chat_body(model, SANITY_PROMPT, 16, &[]);
     let mut r = if want_bg {
         let bg_body = chat_body(
@@ -176,7 +239,7 @@ pub fn check_tensorfold(res: &mut CheckResult, cfg: &EngineConfig, c: &mut Clien
     let text = chat_text(&r);
     let shown = match &text {
         None => "null".to_string(),
-        Some(text) => probes::py_repr(&text.trim().chars().take(30).collect::<String>()),
+        Some(text) => crate::py_repr_str(&text.trim().chars().take(30).collect::<String>()),
     };
     if text.as_deref().is_some_and(sanity_answer_ok) {
         res.sanity.result = "pass".to_string();
@@ -208,21 +271,27 @@ pub fn check_tensorfold(res: &mut CheckResult, cfg: &EngineConfig, c: &mut Clien
 }
 
 /// `ids = [d["id"] for d in m.json["data"]]`, None for the shapes Python turns
-/// into its "model list has no data[].id" failure.
-fn model_ids(m: &Resp) -> Option<Vec<String>> {
+/// into its "model list has no data[].id" failure. The ids stay raw: Python
+/// keeps whatever `id` values the engine reported.
+fn model_ids(m: &Resp) -> Option<Vec<Value>> {
     let data = m.json.as_ref()?.as_object()?.get("data")?.as_array()?;
     let mut ids = Vec::with_capacity(data.len());
     for item in data {
-        ids.push(id_string(item.as_object()?.get("id")?));
+        ids.push(item.as_object()?.get("id")?.clone());
     }
     Some(ids)
 }
 
-/// Python `str()` of a model id, for joining ids in the mismatch message.
-fn id_string(v: &Value) -> String {
+/// Python's type name, for the `', '.join` TypeError message.
+fn py_type_name(v: &Value) -> &'static str {
     match v {
-        Value::String(s) => s.clone(),
-        other => other.to_string(),
+        Value::Null => "NoneType",
+        Value::Bool(_) => "bool",
+        Value::Number(n) if n.is_i64() || n.is_u64() => "int",
+        Value::Number(_) => "float",
+        Value::String(_) => "str",
+        Value::Array(_) => "list",
+        Value::Object(_) => "dict",
     }
 }
 
@@ -279,7 +348,7 @@ mod tests {
         chat: Handler,
         completions: Option<Handler>,
         shared: bool,
-        expected: BTreeMap<String, String>,
+        expected: BTreeMap<String, Value>,
     }
 
     fn scenario() -> Scenario {
@@ -325,7 +394,7 @@ mod tests {
         fn expected(mut self, pairs: &[(&str, &str)]) -> Self {
             self.expected = pairs
                 .iter()
-                .map(|(name, value)| (name.to_string(), value.to_string()))
+                .map(|(name, value)| (name.to_string(), Value::String((*value).to_string())))
                 .collect();
             self
         }
@@ -505,13 +574,17 @@ mod tests {
     /// Run one scenario through the real `Client` and `check_tensorfold`,
     /// setting `requests` the way Python's `check_engine` does.
     fn run(sc: Scenario, opts: &Opts) -> (CheckResult, u32) {
+        run_with_model(sc, MODEL, opts)
+    }
+
+    fn run_with_model(sc: Scenario, model: &str, opts: &Opts) -> (CheckResult, u32) {
         let shared = sc.shared;
         let expected = sc.expected.clone();
         let url = serve(sc);
         let cfg = EngineConfig {
             name: "e".to_string(),
             url: url.clone(),
-            model: MODEL.to_string(),
+            model: model.to_string(),
             kind: "tensorfold".to_string(),
             host: "h".to_string(),
             shared,
@@ -772,6 +845,107 @@ mod tests {
     }
 
     #[test]
+    fn shared_with_fractional_load_is_busy() {
+        let sc = scenario()
+            .health(
+                200,
+                json!({
+                    "ok": true,
+                    "model_ids": [MODEL],
+                    "requests_running": 1.0,
+                    "requests_waiting": 0,
+                }),
+            )
+            .chat(|_| ok_chat())
+            .shared(true);
+        let (res, requests) = run(sc, &opts(true));
+        assert_eq!(res.load, "busy (1.0 running, 0 waiting)");
+        assert_eq!(res.status, Status::SkippedBusy);
+        assert_eq!(requests, 1, "no sanity or probes while busy");
+    }
+
+    #[test]
+    fn model_ids_string_is_a_character_sequence() {
+        let sc = scenario()
+            .health(
+                200,
+                json!({
+                    "ok": true,
+                    "model_ids": MODEL,
+                    "requests_running": 0,
+                    "requests_waiting": 0,
+                }),
+            )
+            .chat(|_| ok_chat());
+        let (res, requests) = run(sc, &opts(true));
+        assert_eq!(res.status, Status::Ok, "{:?}", res.problems);
+        assert_eq!(res.model, "M", "ids[0] of a string is its first character");
+        assert_eq!(requests, 2, "health and sanity; no /v1/models fetch");
+        assert!(res.fatal.is_none());
+    }
+
+    #[test]
+    fn model_ids_number_list_mismatches_then_dies_on_join() {
+        let sc = scenario()
+            .health(200, json!({"ok": true, "model_ids": [5]}))
+            .chat(|_| ok_chat());
+        let (res, requests) = run_with_model(sc, "5", &opts(true));
+        assert_eq!(res.model, "5", "the raw first id renders via str()");
+        assert_eq!(
+            res.fatal.as_deref(),
+            Some("TypeError: sequence item 0: expected str instance, int found")
+        );
+        assert_eq!(requests, 1, "the crash happens before sanity");
+        assert!(res.problems.is_empty(), "Python dies building the message");
+    }
+
+    #[test]
+    fn model_ids_dict_is_a_key_error() {
+        let sc = scenario()
+            .health(200, json!({"ok": true, "model_ids": {"a": 1}}))
+            .chat(|_| ok_chat());
+        let (res, requests) = run(sc, &opts(true));
+        assert_eq!(res.fatal.as_deref(), Some("KeyError: 0"));
+        assert_eq!(requests, 1);
+    }
+
+    #[test]
+    fn fetched_number_id_mismatches_then_dies_on_join() {
+        let sc = scenario()
+            .health(200, json!({"ok": true, "requests_running": 0}))
+            .models(200, json!({"data": [{"id": 5}]}))
+            .chat(|_| ok_chat());
+        let (res, requests) = run_with_model(sc, "5", &opts(true));
+        assert_eq!(res.model, "5");
+        assert_eq!(
+            res.fatal.as_deref(),
+            Some("TypeError: sequence item 0: expected str instance, int found")
+        );
+        assert_eq!(requests, 2, "health then /v1/models");
+    }
+
+    #[test]
+    fn raw_number_expected_feature_drifts() {
+        let url = serve(scenario().health(200, healthy()).chat(ideal_chat));
+        let registry = crate::registry::parse_registry(&format!(
+            "[engines.e]\nurl = \"{url}\"\nmodel = \"{MODEL}\"\nkind = \"tensorfold\"\n\
+             [engines.e.expected_features]\nlogprobs = 1\n"
+        ))
+        .expect("parse registry");
+        let cfg = registry.engine("e").expect("engine").clone();
+        let mut client = Client::new(cfg.base_url(), 5.0);
+        let mut res = CheckResult::for_engine(&cfg);
+        check_tensorfold(&mut res, &cfg, &mut client, &opts(false));
+
+        let logprobs = feature(&res, "logprobs");
+        assert_eq!(logprobs.result, "yes");
+        assert_eq!(logprobs.expected, Some(json!(1)));
+        assert!(logprobs.drift, "a number never equals a result string");
+        assert_eq!(res.verdict(), "drift");
+        assert_eq!(exit_code(std::slice::from_ref(&res)), 2);
+    }
+
+    #[test]
     fn bg_accepted_full_keeps_background_priority_on_probes() {
         let sc = scenario()
             .health(200, healthy())
@@ -815,7 +989,7 @@ mod tests {
         let bg = feature(&res, "background_priority");
         assert_eq!(bg.result, "no");
         assert_eq!(bg.reason, "HTTP 400: priority not supported");
-        assert_eq!(bg.expected.as_deref(), Some("yes"));
+        assert_eq!(bg.expected, Some(json!("yes")));
         assert!(bg.drift);
         assert_eq!(feature(&res, "guided_choice").result, "yes");
         assert_eq!(feature(&res, "logprobs").result, "yes");
@@ -992,7 +1166,7 @@ mod tests {
         assert_eq!(res.verdict(), "drift");
         let lp = feature(&res, "logprobs");
         assert_eq!(lp.result, "no");
-        assert_eq!(lp.expected.as_deref(), Some("yes"));
+        assert_eq!(lp.expected, Some(json!("yes")));
         assert!(lp.drift);
         assert_eq!(res.problems.len(), 0);
         assert_eq!(requests, 6);
@@ -1050,7 +1224,7 @@ mod tests {
             bg.reason,
             "accepted, but starved 0.3s behind other work; sanity re-sent at normal priority"
         );
-        assert_eq!(bg.expected.as_deref(), Some("yes"));
+        assert_eq!(bg.expected, Some(json!("yes")));
         assert!(!bg.drift);
         assert_eq!(res.notes.len(), 1);
         assert!(res.notes[0].contains("re-sent once at normal priority"));

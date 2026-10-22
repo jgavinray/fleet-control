@@ -3,7 +3,7 @@
 //! (widest cell, two-space join, right-trimmed lines), same detail-line order,
 //! and the same summary line.
 
-use fleet_core::{CheckResult, Status};
+use fleet_core::{py_str, CheckResult, Status};
 
 /// Python's `FEATURES` tuple: the probe order used in cells and detail lines.
 pub const FEATURES: [&str; 4] = [
@@ -132,7 +132,11 @@ pub fn render_table(results: &[CheckResult], quick: bool) -> String {
                     let expected = if feature.drift {
                         format!(
                             " (expected {})",
-                            feature.expected.as_deref().unwrap_or("None")
+                            feature
+                                .expected
+                                .as_ref()
+                                .map(py_str)
+                                .unwrap_or_else(|| "None".to_string())
                         )
                     } else {
                         String::new()
@@ -186,6 +190,7 @@ fn format_row(cells: &[String], widths: &[usize]) -> String {
 mod tests {
     use super::*;
     use fleet_core::Feature;
+    use serde_json::json;
 
     fn result(name: &str) -> CheckResult {
         CheckResult::new(name, "http://127.0.0.1:1", "h", "tensorfold")
@@ -212,7 +217,7 @@ mod tests {
         let mut drifted = result("a");
         drifted.features.insert(
             "logprobs".to_string(),
-            Feature::record("no", "absent", Some("yes")),
+            Feature::record("no", "absent", Some(&json!("yes"))),
         );
         assert_eq!(feature_cell(&drifted, false), "logprobs=no!");
     }
@@ -261,11 +266,11 @@ mod tests {
         let mut res = result("c");
         res.features.insert(
             "logprobs".to_string(),
-            Feature::record("no", "absent", Some("yes")),
+            Feature::record("no", "absent", Some(&json!("yes"))),
         );
         res.features.insert(
             "guided_choice".to_string(),
-            Feature::record("yes", "picked", Some("yes")),
+            Feature::record("yes", "picked", Some(&json!("yes"))),
         );
         res.notes.push("starved once".to_string());
 
@@ -279,6 +284,21 @@ mod tests {
             "yes features are not detailed"
         );
         assert!(out.ends_with("c: note: starved once"));
+    }
+
+    #[test]
+    fn drift_detail_renders_a_raw_expected_value() {
+        let mut res = result("d");
+        res.features.insert(
+            "logprobs".to_string(),
+            Feature::record("no", "absent", Some(&json!(1))),
+        );
+
+        let out = render_table(&[res], false);
+        assert!(
+            out.contains("d: DRIFT logprobs = no (expected 1): absent"),
+            "{out:?}"
+        );
     }
 
     #[test]

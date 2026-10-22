@@ -10,8 +10,8 @@ use std::path::{Path, PathBuf};
 use serde_json::json;
 
 use fleet_core::{
-    apply_local_address, describe_load, exit_code, health_up, load_local_addresses, parse_registry,
-    sanity_answer_ok, CheckResult, Client, Feature, Resp, Sanity, Status,
+    apply_local_address, describe_load, exit_code, health_up, load_local_addresses, load_registry,
+    parse_registry, sanity_answer_ok, CheckResult, Client, Feature, Resp, Sanity, Status,
 };
 
 fn addresses(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
@@ -47,10 +47,13 @@ fn real_registry_parses() {
     assert!(!deepseek.shared);
     assert_eq!(deepseek.health_path(), "/health");
     assert_eq!(deepseek.exporter_url, None);
-    assert_eq!(deepseek.expected("guided_choice"), Some("no"));
-    assert_eq!(deepseek.expected("background_priority"), Some("yes"));
-    assert_eq!(deepseek.expected("logprobs"), Some("no"));
-    assert_eq!(deepseek.expected("prompt_logprobs"), Some("no"));
+    assert_eq!(deepseek.expected("guided_choice"), Some(&json!("no")));
+    assert_eq!(
+        deepseek.expected("background_priority"),
+        Some(&json!("yes"))
+    );
+    assert_eq!(deepseek.expected("logprobs"), Some(&json!("no")));
+    assert_eq!(deepseek.expected("prompt_logprobs"), Some(&json!("no")));
 
     let lfm2d = registry.engine("lfm2d-8b").expect("lfm2d-8b engine");
     assert_eq!(lfm2d.health_path(), "/v1/models");
@@ -77,7 +80,7 @@ fn local_override_file_semantics() {
         "local-ok.toml",
         "[hosts.spark]\naddress = \"192.0.2.10\"\n\n[hosts.spark2]\naddress = \"\"\n\n[hosts.hyper01]\nnotes = \"no address here\"\n",
     );
-    let found = load_local_addresses(Some(&ok));
+    let found = load_local_addresses(Some(&ok)).expect("valid override");
     assert_eq!(found.get("spark").map(String::as_str), Some("192.0.2.10"));
     assert!(!found.contains_key("spark2"), "empty address is ignored");
     assert!(!found.contains_key("hyper01"), "missing address is ignored");
@@ -87,13 +90,14 @@ fn local_override_file_semantics() {
         "fleet-core-{}-no-such-file.toml",
         std::process::id()
     ));
-    assert!(load_local_addresses(Some(&missing)).is_empty());
+    assert!(load_local_addresses(Some(&missing))
+        .expect("a missing file is ignored")
+        .is_empty());
 
     let bad = temp_file("local-bad.toml", "this is not [ valid toml");
-    assert!(
-        load_local_addresses(Some(&bad)).is_empty(),
-        "invalid TOML is ignored"
-    );
+    assert!(load_local_addresses(Some(&bad))
+        .expect("invalid TOML warns and is ignored")
+        .is_empty());
     std::fs::remove_file(&bad).ok();
 }
 
@@ -101,15 +105,15 @@ fn local_override_file_semantics() {
 fn local_override_rewrites_bare_name_and_keeps_port() {
     let addrs = addresses(&[("spark", "192.0.2.10")]);
     assert_eq!(
-        apply_local_address("http://spark:8888/v1/models", &addrs),
+        apply_local_address("http://spark:8888/v1/models", &addrs).expect("valid port"),
         "http://192.0.2.10:8888/v1/models"
     );
     assert_eq!(
-        apply_local_address("http://spark", &addrs),
+        apply_local_address("http://spark", &addrs).expect("valid url"),
         "http://192.0.2.10"
     );
     assert_eq!(
-        apply_local_address("http://spark:8888?x=1", &addrs),
+        apply_local_address("http://spark:8888?x=1", &addrs).expect("valid port"),
         "http://192.0.2.10:8888?x=1"
     );
 }
@@ -118,15 +122,15 @@ fn local_override_rewrites_bare_name_and_keeps_port() {
 fn local_override_rewrites_ts_net_name_and_exporter() {
     let addrs = addresses(&[("spark", "192.0.2.10")]);
     assert_eq!(
-        apply_local_address("http://spark.puma-wyvern.ts.net:8888", &addrs),
+        apply_local_address("http://spark.puma-wyvern.ts.net:8888", &addrs).expect("valid port"),
         "http://192.0.2.10:8888"
     );
 
     let mut registry = parse_registry(
-        "[engines.e]\nurl = \"http://spark.puma-wyvern.ts.net:8888\"\nexporter_url = \"http://spark.puma-wyvern.ts.net:9170\"\n\n[hosts.spark]\nfqdn = \"spark.puma-wyvern.ts.net\"\n",
+        "[engines.e]\nurl = \"http://spark.puma-wyvern.ts.net:8888\"\nmodel = \"m\"\nexporter_url = \"http://spark.puma-wyvern.ts.net:9170\"\n\n[hosts.spark]\nfqdn = \"spark.puma-wyvern.ts.net\"\n",
     )
     .expect("parse inline registry");
-    registry.apply_local(&addrs);
+    registry.apply_local(&addrs).expect("valid ports");
     let engine = registry.engine("e").expect("engine e");
     assert_eq!(engine.url, "http://192.0.2.10:8888");
     assert_eq!(
@@ -139,19 +143,20 @@ fn local_override_rewrites_ts_net_name_and_exporter() {
 fn local_override_leaves_other_hosts_alone() {
     let addrs = addresses(&[("spark", "192.0.2.10")]);
     assert_eq!(
-        apply_local_address("http://hyper01.puma-wyvern.ts.net:8001", &addrs),
+        apply_local_address("http://hyper01.puma-wyvern.ts.net:8001", &addrs).expect("valid port"),
         "http://hyper01.puma-wyvern.ts.net:8001"
     );
     assert_eq!(
-        apply_local_address("http://spark.example.com:8888", &addrs),
+        apply_local_address("http://spark.example.com:8888", &addrs).expect("valid port"),
         "http://spark.example.com:8888"
     );
     assert_eq!(
-        apply_local_address("http://spark.puma-wyvern.ts.net.evil:8888", &addrs),
+        apply_local_address("http://spark.puma-wyvern.ts.net.evil:8888", &addrs)
+            .expect("valid port"),
         "http://spark.puma-wyvern.ts.net.evil:8888"
     );
     assert_eq!(
-        apply_local_address("http://spark:8888", &addresses(&[])),
+        apply_local_address("http://spark:8888", &addresses(&[])).expect("valid port"),
         "http://spark:8888"
     );
 }
@@ -160,17 +165,71 @@ fn local_override_leaves_other_hosts_alone() {
 fn local_override_brackets_ipv6() {
     let addrs = addresses(&[("spark", "fd00::5")]);
     assert_eq!(
-        apply_local_address("http://spark.puma-wyvern.ts.net:8888", &addrs),
+        apply_local_address("http://spark.puma-wyvern.ts.net:8888", &addrs).expect("valid port"),
         "http://[fd00::5]:8888"
     );
     assert_eq!(
-        apply_local_address("http://spark", &addrs),
+        apply_local_address("http://spark", &addrs).expect("valid url"),
         "http://[fd00::5]"
     );
     assert_eq!(
-        apply_local_address("http://spark:8888/health", &addrs),
+        apply_local_address("http://spark:8888/health", &addrs).expect("valid port"),
         "http://[fd00::5]:8888/health"
     );
+}
+
+#[test]
+fn local_override_port_edges() {
+    let addrs = addresses(&[("spark", "192.0.2.10")]);
+    assert_eq!(
+        apply_local_address("http://spark:0/health", &addrs),
+        Ok("http://192.0.2.10/health".to_string()),
+        "Python drops port 0"
+    );
+    assert_eq!(
+        apply_local_address("http://spark:/health", &addrs),
+        Ok("http://192.0.2.10/health".to_string()),
+        "Python drops an empty port"
+    );
+    assert_eq!(
+        apply_local_address("http://spark:abc/health", &addrs),
+        Err("Port could not be cast to integer value as 'abc'".to_string())
+    );
+    assert_eq!(
+        apply_local_address("http://spark:70000/health", &addrs),
+        Err("Port out of range 0-65535".to_string())
+    );
+}
+
+#[test]
+fn empty_local_override_leaves_ts_net_urls_alone() {
+    // The developer's real ~/.config/fleet-control/local.toml must not leak
+    // into a test registry.
+    std::env::set_var("FLEET_LOCAL", "/dev/null");
+    let path = temp_file(
+        "registry-tsnet.toml",
+        "[engines.e]\nurl = \"http://spark.puma-wyvern.ts.net:8888\"\nmodel = \"m\"\nkind = \"tensorfold\"\n",
+    );
+    let registry = load_registry(&path).expect("fixture loads");
+    assert_eq!(
+        registry.engine("e").expect("engine").url,
+        "http://spark.puma-wyvern.ts.net:8888"
+    );
+
+    let local = temp_file(
+        "local-tsnet.toml",
+        "[hosts.spark]\naddress = \"192.0.2.10\"\n",
+    );
+    std::env::set_var("FLEET_LOCAL", &local);
+    let registry = load_registry(&path).expect("fixture loads");
+    assert_eq!(
+        registry.engine("e").expect("engine").url,
+        "http://192.0.2.10:8888"
+    );
+
+    std::fs::remove_file(&path).ok();
+    std::fs::remove_file(&local).ok();
+    std::env::set_var("FLEET_LOCAL", "/dev/null");
 }
 
 #[test]
@@ -190,26 +249,63 @@ fn health_up_shapes() {
 fn describe_load_strings() {
     assert_eq!(
         describe_load(&json!({"requests_running": 4, "requests_waiting": 1})),
-        ("busy (4 running, 1 waiting)".to_string(), 5)
+        ("busy (4 running, 1 waiting)".to_string(), 5.0)
     );
     assert_eq!(
         describe_load(&json!({"requests_running": 0, "requests_waiting": 0})),
-        ("idle".to_string(), 0)
+        ("idle".to_string(), 0.0)
     );
     assert_eq!(
         describe_load(&json!({"live": {"connections": 3, "waiting": 2}})),
-        ("busy (3 running, 2 waiting)".to_string(), 5)
+        ("busy (3 running, 2 waiting)".to_string(), 5.0)
     );
     assert_eq!(
         describe_load(&json!({"requests_running": 2, "live": {"waiting": 3}})),
-        ("busy (2 running, 3 waiting)".to_string(), 5)
+        ("busy (2 running, 3 waiting)".to_string(), 5.0)
     );
     assert_eq!(
         describe_load(&json!({"requests_running": 0})),
-        ("idle".to_string(), 0)
+        ("idle".to_string(), 0.0)
     );
-    assert_eq!(describe_load(&json!({})), (String::new(), 0));
-    assert_eq!(describe_load(&json!([])), (String::new(), 0));
+    assert_eq!(describe_load(&json!({})), (String::new(), 0.0));
+    assert_eq!(describe_load(&json!([])), (String::new(), 0.0));
+}
+
+#[test]
+fn describe_load_keeps_raw_counters() {
+    assert_eq!(
+        describe_load(&json!({"requests_running": -1, "requests_waiting": 0})),
+        ("busy (-1 running, 0 waiting)".to_string(), -1.0),
+        "a negative counter still means busy"
+    );
+    assert_eq!(
+        describe_load(&json!({"requests_running": -1, "requests_waiting": 2})),
+        ("busy (-1 running, 2 waiting)".to_string(), 1.0)
+    );
+    assert_eq!(
+        describe_load(&json!({"requests_running": 1.5})),
+        ("busy (1.5 running, 0 waiting)".to_string(), 1.5)
+    );
+    assert_eq!(
+        describe_load(&json!({"requests_running": 1.0})),
+        ("busy (1.0 running, 0 waiting)".to_string(), 1.0),
+        "an integral float keeps Python's .0"
+    );
+    assert_eq!(
+        describe_load(&json!({"requests_running": -1.5})),
+        ("busy (-1.5 running, 0 waiting)".to_string(), -1.5)
+    );
+    assert_eq!(
+        describe_load(
+            &json!({"requests_running": null, "live": {"connections": -2, "waiting": 0}})
+        ),
+        ("busy (-2 running, 0 waiting)".to_string(), -2.0),
+        "a null counter falls back to live"
+    );
+    assert_eq!(
+        describe_load(&json!({"requests_running": false, "requests_waiting": true})),
+        ("busy (0 running, True waiting)".to_string(), 1.0)
+    );
 }
 
 #[test]
@@ -318,7 +414,7 @@ fn verdict_reports_drift() {
 
     result.features.insert(
         "guided_choice".to_string(),
-        Feature::record("yes", "answered 'apple'", Some("no")),
+        Feature::record("yes", "answered 'apple'", Some(&json!("no"))),
     );
     assert!(result.features["guided_choice"].drift);
     assert_eq!(result.drifted(), vec!["guided_choice"]);
@@ -326,7 +422,7 @@ fn verdict_reports_drift() {
 
     result.features.insert(
         "logprobs".to_string(),
-        Feature::record("skipped", "shared engine busy", Some("no")),
+        Feature::record("skipped", "shared engine busy", Some(&json!("no"))),
     );
     assert!(!result.features["logprobs"].drift);
     assert_eq!(result.drifted(), vec!["guided_choice"]);
@@ -354,7 +450,7 @@ fn exit_codes_follow_verdicts() {
     let mut drift = CheckResult::new("b", "u", "h", "tensorfold");
     drift.features.insert(
         "logprobs".to_string(),
-        Feature::record("yes", "returned", Some("no")),
+        Feature::record("yes", "returned", Some(&json!("no"))),
     );
     assert_eq!(exit_code(std::slice::from_ref(&drift)), 2);
     assert_eq!(exit_code(&[ok.clone(), drift.clone()]), 2);
@@ -378,7 +474,7 @@ fn to_json_has_python_fields_in_sorted_order() {
     };
     result.features.insert(
         "guided_choice".to_string(),
-        Feature::record("no", "refused", Some("no")),
+        Feature::record("no", "refused", Some(&json!("no"))),
     );
     result.notes.push("loaded on cuda:0".to_string());
     result.requests = 3;

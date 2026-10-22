@@ -12,6 +12,10 @@ use std::time::{Duration, Instant};
 use serde_json::Value;
 use ureq::Agent;
 
+/// Python's socket timeout is stored as int64 nanoseconds, so anything past
+/// this many seconds raises OverflowError inside `urlopen`.
+const MAX_TIMEOUT_SECS: f64 = 9_223_372_036.854_776;
+
 /// One HTTP answer. `status` 0 means no answer at all (refused, timeout).
 #[derive(Clone, Debug)]
 pub struct Resp {
@@ -164,10 +168,40 @@ impl Client {
         self.count += 1;
         let started = Instant::now();
 
+        // Python's `timeout or self.timeout`: a zero per-call override falls
+        // back to the client default, but a negative one is used as-is.
         let timeout = match timeout {
-            Some(t) if t > 0.0 => t,
+            Some(t) if t != 0.0 => t,
             _ => self.timeout,
         };
+
+        // urllib raises before opening a socket: ValueError for a negative
+        // timeout and for NaN, OverflowError for infinity or a value past the
+        // int64-nanosecond ceiling (~9.2e9 s). Python counts the request.
+        if timeout.is_nan() {
+            return Resp::new(
+                0,
+                String::new(),
+                started.elapsed().as_secs_f64(),
+                "ValueError: Invalid value NaN (not a number)",
+            );
+        }
+        if timeout < 0.0 {
+            return Resp::new(
+                0,
+                String::new(),
+                started.elapsed().as_secs_f64(),
+                "ValueError: Timeout value out of range",
+            );
+        }
+        if timeout > MAX_TIMEOUT_SECS {
+            return Resp::new(
+                0,
+                String::new(),
+                started.elapsed().as_secs_f64(),
+                "OverflowError: timestamp out of range for platform time_t",
+            );
+        }
 
         let outcome = match method {
             "GET" => {
@@ -208,8 +242,14 @@ impl Client {
             Ok(response) => {
                 let status = response.status().as_u16();
                 let elapsed = started.elapsed().as_secs_f64();
-                match response.into_body().read_to_string() {
-                    Ok(text) => Resp::new(status, text, elapsed, String::new()),
+                let mut body = response.into_body();
+                match body.read_to_vec() {
+                    Ok(bytes) => Resp::new(
+                        status,
+                        String::from_utf8_lossy(&bytes).into_owned(),
+                        elapsed,
+                        String::new(),
+                    ),
                     Err(e) => Resp::new(0, String::new(), elapsed, error_text(&e)),
                 }
             }
@@ -224,7 +264,9 @@ impl Client {
 }
 
 fn duration(secs: f64) -> Duration {
-    Duration::from_secs_f64(secs.max(0.0))
+    // A non-finite or out-of-range timeout is rejected in `request` before any
+    // I/O; this keeps construction panic-free when `--timeout inf` is parsed.
+    Duration::try_from_secs_f64(secs).unwrap_or(Duration::ZERO)
 }
 
 /// Python's error strings for the cases the checks look at. Timeouts carry
@@ -312,5 +354,99 @@ pub fn py_dumps(v: &Value) -> String {
         ),
         Value::String(s) => serde_json::to_string(s).unwrap_or_default(),
         other => other.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{BufRead, BufReader, Read, Write};
+    use std::net::TcpListener;
+    use std::thread;
+
+    use serde_json::json;
+
+    /// Serve exactly one request with a fixed raw response, then close.
+    fn serve_once(response: Vec<u8>) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind a free port");
+        let address = listener.local_addr().expect("local addr");
+        thread::spawn(move || {
+            let Ok((stream, _)) = listener.accept() else {
+                return;
+            };
+            let mut reader = BufReader::new(stream.try_clone().expect("clone the stream"));
+            let mut content_length = 0usize;
+            loop {
+                let mut line = String::new();
+                if reader.read_line(&mut line).unwrap_or(0) == 0 {
+                    break;
+                }
+                if line == "\r\n" || line == "\n" {
+                    break;
+                }
+                let lower = line.to_ascii_lowercase();
+                if let Some(value) = lower.strip_prefix("content-length:") {
+                    content_length = value.trim().parse().unwrap_or(0);
+                }
+            }
+            let mut body = vec![0u8; content_length];
+            if content_length > 0 {
+                reader.read_exact(&mut body).ok();
+            }
+            let mut stream = stream;
+            stream.write_all(&response).ok();
+            stream.flush().ok();
+        });
+        format!("http://{address}")
+    }
+
+    #[test]
+    fn bad_timeouts_fail_without_io_and_count_the_request() {
+        for timeout in [-5.0, -0.5] {
+            let mut client = Client::new("http://127.0.0.1:1", timeout);
+            let resp = client.get("/health");
+            assert_eq!(resp.status, 0);
+            assert_eq!(resp.error, "ValueError: Timeout value out of range");
+            assert!(!resp.error.contains("timed out"));
+            assert_eq!(resp.text, "");
+            assert!(resp.json.is_none());
+            assert_eq!(client.count, 1);
+        }
+
+        let mut client = Client::new("http://127.0.0.1:1", 60.0);
+        let resp = client.post_with_timeout("/v1/systemone", &json!({}), -0.5);
+        assert_eq!(resp.status, 0);
+        assert_eq!(resp.error, "ValueError: Timeout value out of range");
+        assert_eq!(client.count, 1);
+
+        for timeout in [f64::INFINITY, 1e10] {
+            let mut client = Client::new("http://127.0.0.1:1", timeout);
+            let resp = client.get("/health");
+            assert_eq!(resp.status, 0);
+            assert_eq!(
+                resp.error,
+                "OverflowError: timestamp out of range for platform time_t"
+            );
+            assert_eq!(client.count, 1);
+        }
+
+        let mut client = Client::new("http://127.0.0.1:1", f64::NAN);
+        let resp = client.get("/health");
+        assert_eq!(resp.status, 0);
+        assert_eq!(resp.error, "ValueError: Invalid value NaN (not a number)");
+        assert_eq!(client.count, 1);
+    }
+
+    #[test]
+    fn invalid_utf8_body_keeps_the_status_and_decodes_lossily() {
+        let base = serve_once(
+            b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n\xff\xfe".to_vec(),
+        );
+        let mut client = Client::new(&base, 5.0);
+        let resp = client.get("/health");
+        assert_eq!(resp.status, 200, "Python keeps the status");
+        assert_eq!(resp.text, "\u{FFFD}\u{FFFD}");
+        assert!(resp.json.is_none());
+        assert_eq!(client.count, 1);
     }
 }

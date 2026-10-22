@@ -29,7 +29,11 @@ mod tests {
         let mut res = CheckResult::new("alpha", "http://127.0.0.1:1", "h", "tensorfold");
         res.features.insert(
             "logprobs".to_string(),
-            Feature::record("no", "absent", Some("yes")),
+            Feature::record("no", "absent", Some(&json!("yes"))),
+        );
+        res.features.insert(
+            "prompt_logprobs".to_string(),
+            Feature::record("no", "absent", Some(&json!(1))),
         );
 
         let text = render(&[res], 1);
@@ -47,6 +51,8 @@ mod tests {
         assert_eq!(engines[0]["engine"], "alpha");
         assert_eq!(engines[0]["verdict"], "drift");
         assert_eq!(engines[0]["features"]["logprobs"]["drift"], true);
+        assert_eq!(engines[0]["features"]["prompt_logprobs"]["expected"], 1);
+        assert_eq!(engines[0]["features"]["prompt_logprobs"]["drift"], true);
         assert!(text.contains("\"features\": {"), "{text}");
     }
 

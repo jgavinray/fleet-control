@@ -87,9 +87,18 @@ fn flag_name(flag: Flag) -> &'static str {
     }
 }
 
+/// A value attached to an option: after an equals sign (`--json=true`,
+/// `-h=foo`) or directly to a short option (`-hfoo`). The separator matters
+/// for `-h`: argparse ignores a directly attached value but rejects `-h=foo`.
+#[derive(Clone, Debug)]
+struct Attached {
+    sep: Option<char>,
+    value: String,
+}
+
 enum Classified {
     Positional,
-    Option(Flag, Option<String>),
+    Option(Flag, Option<Attached>),
     Unknown,
 }
 
@@ -99,13 +108,19 @@ fn classify(arg: &str) -> Result<Classified, ParseError> {
         return Ok(Classified::Positional);
     }
     if let Some(body) = arg.strip_prefix("--") {
-        let (name, inline) = match body.split_once('=') {
-            Some((name, value)) => (name, Some(value.to_string())),
+        let (name, attached) = match body.split_once('=') {
+            Some((name, value)) => (
+                name,
+                Some(Attached {
+                    sep: Some('='),
+                    value: value.to_string(),
+                }),
+            ),
             None => (body, None),
         };
         let long = format!("--{name}");
         if let Some((_, flag)) = LONG_OPTIONS.iter().find(|(option, _)| *option == long) {
-            return Ok(Classified::Option(*flag, inline));
+            return Ok(Classified::Option(*flag, attached));
         }
         let candidates: Vec<&str> = LONG_OPTIONS
             .iter()
@@ -120,7 +135,7 @@ fn classify(arg: &str) -> Result<Classified, ParseError> {
                     .find(|(option, _)| option == only)
                     .map(|(_, flag)| *flag)
                     .expect("the candidate came from LONG_OPTIONS");
-                Ok(Classified::Option(flag, inline))
+                Ok(Classified::Option(flag, attached))
             }
             many => Err(usage(format!(
                 "ambiguous option: {long} could match {}",
@@ -131,8 +146,18 @@ fn classify(arg: &str) -> Result<Classified, ParseError> {
     if arg == "-h" {
         return Ok(Classified::Option(Flag::Help, None));
     }
-    if let Some(value) = arg.strip_prefix("-h") {
-        return Ok(Classified::Option(Flag::Help, Some(value.to_string())));
+    if let Some(rest) = arg.strip_prefix("-h") {
+        let attached = match rest.strip_prefix('=') {
+            Some(value) => Attached {
+                sep: Some('='),
+                value: value.to_string(),
+            },
+            None => Attached {
+                sep: None,
+                value: rest.to_string(),
+            },
+        };
+        return Ok(Classified::Option(Flag::Help, Some(attached)));
     }
     Ok(Classified::Unknown)
 }
@@ -220,12 +245,28 @@ pub fn parse(args: &[String]) -> Result<Opts, ParseError> {
                     run_ended = true;
                 }
                 match flag {
-                    Flag::Help => return Err(ParseError::Help),
-                    Flag::Json | Flag::Quick | Flag::ForceShared => {
-                        if let Some(value) = inline {
+                    // argparse: `-hfoo` still prints help (the tail is treated
+                    // as more short options, and help exits first), but
+                    // `-h=foo`, `-h-foo` and `--help=foo` are "ignored
+                    // explicit argument".
+                    Flag::Help => match inline {
+                        None => return Err(ParseError::Help),
+                        Some(attached)
+                            if attached.sep.is_some() || attached.value.starts_with('-') =>
+                        {
                             return Err(usage(format!(
-                                "argument {}: ignored explicit argument '{value}'",
-                                flag_name(flag)
+                                "argument -h/--help: ignored explicit argument '{}'",
+                                attached.value
+                            )))
+                        }
+                        Some(_) => return Err(ParseError::Help),
+                    },
+                    Flag::Json | Flag::Quick | Flag::ForceShared => {
+                        if let Some(attached) = inline {
+                            return Err(usage(format!(
+                                "argument {}: ignored explicit argument '{}'",
+                                flag_name(flag),
+                                attached.value
                             )));
                         }
                         match flag {
@@ -237,7 +278,7 @@ pub fn parse(args: &[String]) -> Result<Opts, ParseError> {
                     }
                     Flag::Registry | Flag::Timeout | Flag::BgTimeout => {
                         let (value, consumed) = match inline {
-                            Some(value) => (value, 1),
+                            Some(attached) => (attached.value, 1),
                             None => match args.get(i + 1) {
                                 Some(next) if !is_option_like(next) => (next.clone(), 2),
                                 _ => {
@@ -413,9 +454,15 @@ pub fn select_engines(registry: &Registry, requested: &[String]) -> Result<Vec<S
 #[cfg(test)]
 mod tests {
     use super::*;
+    use fleet_core::Client;
 
     fn argv(items: &[&str]) -> Vec<String> {
         items.iter().map(|item| item.to_string()).collect()
+    }
+
+    /// Keep every registry load away from the developer's real local.toml.
+    fn isolate_local_override() {
+        std::env::set_var("FLEET_LOCAL", "/dev/null");
     }
 
     fn fixture_registry() -> Registry {
@@ -440,6 +487,7 @@ mod tests {
             ("-.5", -0.5),
             ("1_0", 10.0),
             ("1E-2", 0.01),
+            ("1e400", f64::INFINITY),
         ] {
             assert_eq!(parse_py_float(text), Some(want), "{text:?}");
         }
@@ -521,6 +569,22 @@ mod tests {
         let opts = parse(&argv(&["--timeout", "-5"])).expect("negative number is a value");
         assert_eq!(opts.timeout, -5.0);
 
+        // argparse accepts it; urllib is what rejects it, without any I/O.
+        let mut client = Client::new("http://127.0.0.1:1", opts.timeout);
+        let resp = client.get("/health");
+        assert_eq!(resp.status, 0);
+        assert_eq!(resp.error, "ValueError: Timeout value out of range");
+        assert_eq!(client.count, 1);
+
+        let mut client = Client::new("http://127.0.0.1:1", parse_py_float("1e400").unwrap());
+        let resp = client.get("/health");
+        assert_eq!(resp.status, 0);
+        assert_eq!(
+            resp.error,
+            "OverflowError: timestamp out of range for platform time_t"
+        );
+        assert_eq!(client.count, 1);
+
         for bad in ["abc", "/x", ""] {
             let broken = if bad.is_empty() {
                 argv(&["--timeout="])
@@ -546,6 +610,29 @@ mod tests {
     fn help_prints_usage_and_succeeds() {
         assert!(matches!(parse(&argv(&["--help"])), Err(ParseError::Help)));
         assert!(matches!(parse(&argv(&["-h"])), Err(ParseError::Help)));
+        // argparse treats the tail of `-hfoo` as more short options; help exits
+        // before the unknown tail matters.
+        assert!(matches!(parse(&argv(&["-hfoo"])), Err(ParseError::Help)));
+        assert!(matches!(parse(&argv(&["-h5"])), Err(ParseError::Help)));
+    }
+
+    #[test]
+    fn help_with_an_equals_value_is_a_usage_error() {
+        for (args, value) in [
+            (&["--help=1"][..], "1"),
+            (&["--he=1"][..], "1"),
+            (&["-h=foo"][..], "foo"),
+            (&["-h-foo"][..], "-foo"),
+            (&["--help="][..], ""),
+        ] {
+            match parse(&argv(args)) {
+                Err(ParseError::Usage(message)) => assert_eq!(
+                    message,
+                    format!("argument -h/--help: ignored explicit argument '{value}'")
+                ),
+                other => panic!("{args:?} should fail, got {other:?}"),
+            }
+        }
     }
 
     #[test]
@@ -583,6 +670,7 @@ mod tests {
 
     #[test]
     fn registry_fixture_loads_from_a_tempdir() {
+        isolate_local_override();
         let dir =
             std::env::temp_dir().join(format!("fleet-check-rs-fixture-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("create fixture dir");
@@ -602,6 +690,7 @@ mod tests {
 
     #[test]
     fn missing_registry_is_an_error() {
+        isolate_local_override();
         let dir =
             std::env::temp_dir().join(format!("fleet-check-rs-missing-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("create temp dir");

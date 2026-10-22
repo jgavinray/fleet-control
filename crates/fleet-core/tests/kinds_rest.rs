@@ -15,6 +15,7 @@ use serde_json::{json, Value};
 use fleet_core::http::py_dumps;
 use fleet_core::kinds_rest::rest_kind_check;
 use fleet_core::opts::Opts;
+use fleet_core::py_str;
 use fleet_core::registry::EngineConfig;
 use fleet_core::{CheckResult, Client, Status};
 
@@ -169,7 +170,7 @@ fn engine(kind: &str, base: &str, model: &str, read: &str, exporter: Option<&str
         host: "mock".to_string(),
         health_path: None,
         exporter_url: exporter.map(str::to_string),
-        read: read.to_string(),
+        read: Some(read.to_string()),
         shared: false,
         expected_features: BTreeMap::new(),
     }
@@ -594,4 +595,149 @@ fn rest_kind_dispatch_is_limited_to_rest_kinds() {
     assert!(rest_kind_check("jev-glm").is_some());
     assert!(rest_kind_check("tensorfold").is_none());
     assert!(rest_kind_check("mystery").is_none());
+}
+
+#[test]
+fn laya_health_path_empty_requests_the_base_url() {
+    let mock = Mock::new(vec![
+        route(
+            "GET /",
+            200,
+            json!({"ok": true, "loaded": [], "device": "cpu"}),
+        ),
+        route(
+            "POST /v1/systemone",
+            200,
+            json!({
+                "answers": {"intent": {"choice": "billing"}},
+                "model": MODEL,
+            }),
+        ),
+    ]);
+    let mut cfg = engine("laya", &mock.base, MODEL, "specs", None);
+    cfg.health_path = Some(String::new());
+    let (res, count) = run(&cfg);
+
+    assert_eq!(res.status, Status::Ok);
+    assert_eq!(res.sanity.result, "pass");
+    assert_eq!(
+        paths(&mock.seen()),
+        vec!["GET /", "POST /v1/systemone"],
+        "a present-but-empty health_path requests the base URL"
+    );
+    assert_eq!(count, 2);
+}
+
+#[test]
+fn lfm2d_read_empty_takes_the_spans_path() {
+    let mock = Mock::new(vec![
+        route("GET /v1/models", 200, json!([{"id": MODEL}])),
+        route(
+            "POST /v1/spans/credentials",
+            200,
+            json!([[{"text": "sk-1"}]]),
+        ),
+    ]);
+    let cfg = engine("lfm2d", &mock.base, MODEL, "", None);
+    let (res, count) = run(&cfg);
+
+    assert_eq!(res.status, Status::Ok);
+    assert_eq!(res.sanity.result, "pass");
+    assert_eq!(res.sanity.detail, "span scan answered");
+    assert_eq!(
+        paths(&mock.seen()),
+        vec!["GET /v1/models", "POST /v1/spans/credentials"],
+        "a present-but-empty read is not the specs default"
+    );
+    assert_eq!(count, 2);
+}
+
+#[test]
+fn laya_reply_model_number_is_rendered_and_mismatches() {
+    let mock = Mock::new(vec![
+        route(
+            "GET /health",
+            200,
+            json!({"ok": true, "loaded": [], "device": "cpu"}),
+        ),
+        route(
+            "POST /v1/systemone",
+            200,
+            json!({
+                "answers": {"intent": {"choice": "billing"}},
+                "model": 5,
+            }),
+        ),
+    ]);
+    let cfg = engine("laya", &mock.base, MODEL, "specs", None);
+    let (res, count) = run(&cfg);
+
+    assert_eq!(res.status, Status::Wrong);
+    assert_eq!(res.model, "5", "a non-string model renders via str()");
+    assert_eq!(res.sanity.result, "pass");
+    assert_eq!(
+        res.problems,
+        vec![format!("model is 5, registry expects {MODEL}")]
+    );
+    assert_eq!(count, 2);
+}
+
+#[test]
+fn laya_reply_model_empty_or_null_skips_the_mismatch() {
+    for model in [json!(""), json!(null)] {
+        let mock = Mock::new(vec![
+            route(
+                "GET /health",
+                200,
+                json!({"ok": true, "loaded": [], "device": "cpu"}),
+            ),
+            route(
+                "POST /v1/systemone",
+                200,
+                json!({
+                    "answers": {"intent": {"choice": "billing"}},
+                    "model": model,
+                }),
+            ),
+        ]);
+        let cfg = engine("laya", &mock.base, MODEL, "specs", None);
+        let (res, count) = run(&cfg);
+
+        assert_eq!(res.status, Status::Ok, "{model}");
+        assert!(res.problems.is_empty(), "{model}");
+        assert_eq!(res.model, py_str(&model));
+        assert_eq!(count, 2);
+    }
+}
+
+#[test]
+fn laya_choice_with_quotes_is_repr_escaped() {
+    let mock = Mock::new(vec![
+        route(
+            "GET /health",
+            200,
+            json!({"ok": true, "loaded": [], "device": "cpu"}),
+        ),
+        route(
+            "POST /v1/systemone",
+            200,
+            json!({
+                "answers": {"intent": {"choice": "a'b\"c"}},
+                "model": MODEL,
+            }),
+        ),
+    ]);
+    let cfg = engine("laya", &mock.base, MODEL, "specs", None);
+    let (res, _) = run(&cfg);
+
+    assert_eq!(res.status, Status::Wrong);
+    assert_eq!(res.sanity.result, "fail");
+    assert_eq!(
+        res.sanity.detail, "chose 'a\\'b\"c', expected 'billing'",
+        "Python repr escapes the quote it chose"
+    );
+    assert_eq!(
+        res.problems,
+        vec!["sanity: chose 'a\\'b\"c', expected 'billing'"]
+    );
 }

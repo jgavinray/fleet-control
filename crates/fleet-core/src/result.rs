@@ -83,11 +83,15 @@ impl Sanity {
 
 /// One measured feature. `drift` is true when a result differs from what the
 /// registry expects; a "skipped" result never drifts.
+///
+/// `expected` is the registry's raw value, like Python's `expected_features`
+/// entry: only an equal string matches the measured result, so a number or a
+/// list always drifts.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Feature {
     pub result: String,
     pub reason: String,
-    pub expected: Option<String>,
+    pub expected: Option<Value>,
     pub drift: bool,
 }
 
@@ -96,11 +100,14 @@ impl Feature {
     pub fn record(
         result: impl Into<String>,
         reason: impl Into<String>,
-        expected: Option<&str>,
+        expected: Option<&Value>,
     ) -> Self {
         let result = result.into();
-        let expected = expected.map(str::to_string);
-        let drift = result != "skipped" && expected.as_deref().is_some_and(|e| e != result);
+        let expected = expected.cloned();
+        let drift = result != "skipped"
+            && expected
+                .as_ref()
+                .is_some_and(|expected| &Value::String(result.clone()) != expected);
         Self {
             result,
             reason: reason.into(),
@@ -136,6 +143,10 @@ pub struct CheckResult {
     pub problems: Vec<String>,
     pub notes: Vec<String>,
     pub requests: u32,
+    /// Set when Python would die on an uncaught exception for this engine
+    /// (a broken `model_ids` shape, a non-string id list). The run prints it
+    /// to stderr and exits 1 instead of printing a report.
+    pub fatal: Option<String>,
 }
 
 impl CheckResult {
@@ -159,6 +170,7 @@ impl CheckResult {
             problems: Vec::new(),
             notes: Vec::new(),
             requests: 0,
+            fatal: None,
         }
     }
 

@@ -104,36 +104,6 @@ pub fn truthy(v: &Value) -> bool {
     }
 }
 
-/// Python's `repr()` for a string: the quote Python would pick, with the
-/// escapes it would use. Feature reasons are compared verbatim by the gate.
-pub fn py_repr(s: &str) -> String {
-    let quote = if s.contains('\'') && !s.contains('"') {
-        '"'
-    } else {
-        '\''
-    };
-    let mut out = String::with_capacity(s.len() + 2);
-    out.push(quote);
-    for c in s.chars() {
-        match c {
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            c if c == quote => {
-                out.push('\\');
-                out.push(c);
-            }
-            c if (c as u32) < 0x20 || c as u32 == 0x7f => {
-                out.push_str(&format!("\\x{:02x}", c as u32));
-            }
-            c => out.push(c),
-        }
-    }
-    out.push(quote);
-    out
-}
-
 /// The `send()` wrapper of `check_tensorfold`: it owns the background-priority
 /// state shared by the three probes, and the result it writes notes into.
 pub struct BgSender<'a> {
@@ -212,14 +182,17 @@ pub fn probe_guided(send: &mut BgSender<'_>, model: &str) -> (String, String) {
     };
     let trimmed = text.trim();
     if choices.contains(&trimmed) {
-        return ("yes".to_string(), format!("answered {}", py_repr(trimmed)));
+        return (
+            "yes".to_string(),
+            format!("answered {}", crate::py_repr_str(trimmed)),
+        );
     }
     let shown: String = trimmed.chars().take(40).collect();
     (
         "no".to_string(),
         format!(
             "HTTP 200 but answered {}, not one of the choices (ignored)",
-            py_repr(&shown)
+            crate::py_repr_str(&shown)
         ),
     )
 }
@@ -348,13 +321,13 @@ mod tests {
     fn record_feature_drift_rules() {
         let mut cfg = EngineConfig::default();
         cfg.expected_features
-            .insert("logprobs".to_string(), "yes".to_string());
+            .insert("logprobs".to_string(), json!("yes"));
 
         let mut res = CheckResult::new("e", "http://x", "h", "tensorfold");
         record_feature(&mut res, &cfg, "logprobs", "no", "absent");
         let feature = &res.features["logprobs"];
         assert_eq!(feature.result, "no");
-        assert_eq!(feature.expected.as_deref(), Some("yes"));
+        assert_eq!(feature.expected, Some(json!("yes")));
         assert!(feature.drift);
 
         record_feature(&mut res, &cfg, "logprobs", "yes", "returned");
@@ -389,11 +362,53 @@ mod tests {
     }
 
     #[test]
-    fn python_repr_quotes_and_escapes() {
-        assert_eq!(py_repr("apple"), "'apple'");
-        assert_eq!(py_repr("it's"), "\"it's\"");
-        assert_eq!(py_repr("a'b\"c"), "'a\\'b\"c'");
-        assert_eq!(py_repr("line\nbreak\t"), "'line\\nbreak\\t'");
-        assert_eq!(py_repr(""), "''");
+    fn guided_returns_no_when_the_body_is_not_utf8_json() {
+        use std::io::{BufRead, BufReader, Read, Write};
+        use std::net::TcpListener;
+        use std::thread;
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind a free port");
+        let address = listener.local_addr().expect("local addr");
+        thread::spawn(move || {
+            let Ok((stream, _)) = listener.accept() else {
+                return;
+            };
+            let mut reader = BufReader::new(stream.try_clone().expect("clone the stream"));
+            let mut content_length = 0usize;
+            loop {
+                let mut line = String::new();
+                if reader.read_line(&mut line).unwrap_or(0) == 0 {
+                    break;
+                }
+                if line == "\r\n" || line == "\n" {
+                    break;
+                }
+                let lower = line.to_ascii_lowercase();
+                if let Some(value) = lower.strip_prefix("content-length:") {
+                    content_length = value.trim().parse().unwrap_or(0);
+                }
+            }
+            let mut body = vec![0u8; content_length];
+            if content_length > 0 {
+                reader.read_exact(&mut body).ok();
+            }
+            let mut stream = stream;
+            stream
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n\xff\xfe",
+                )
+                .ok();
+            stream.flush().ok();
+        });
+
+        let mut client = Client::new(&format!("http://{address}"), 5.0);
+        let mut res = CheckResult::new("e", "u", "h", "tensorfold");
+        let mut sender = BgSender::new(&mut client, &mut res, false, 5.0);
+        let (result, reason) = probe_guided(&mut sender, "M-1");
+        assert_eq!(result, "no");
+        assert_eq!(
+            reason,
+            "HTTP 200 but content was null (guidance ignored, or token budget spent thinking)"
+        );
     }
 }

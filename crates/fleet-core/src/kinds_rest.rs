@@ -9,7 +9,7 @@ use serde_json::{json, Value};
 use crate::opts::Opts;
 use crate::registry::EngineConfig;
 use crate::result::{round3, CheckResult, Status};
-use crate::{health_up, Client, Resp};
+use crate::{health_up, py_repr, py_str, py_truthy, Client, Resp};
 
 /// One engine-kind check. The registry entry travels beside the result because
 /// Python's `Result.cfg` is consulted throughout the checks: expected model,
@@ -120,9 +120,12 @@ fn check_systemone(res: &mut CheckResult, r: &Resp, model: &str, qid: &str, want
         return missing_answers(res);
     };
 
-    let got_model = json_body.get("model").and_then(Value::as_str).unwrap_or("");
+    let got_model = json_body
+        .get("model")
+        .cloned()
+        .unwrap_or(Value::String(String::new()));
     let probs = answer.get("probabilities").and_then(Value::as_object);
-    res.model = got_model.to_string();
+    res.model = py_str(&got_model);
 
     if choice.as_str() == Some(want) {
         let extra = match probs.and_then(|probs| probs.get(want)) {
@@ -145,10 +148,12 @@ fn check_systemone(res: &mut CheckResult, r: &Resp, model: &str, qid: &str, want
         res.fail(Status::Wrong, format!("sanity: {}", res.sanity.detail));
     }
 
-    if !got_model.is_empty() && got_model != model {
+    // Python's `if got_model and got_model != model`: truthiness on the raw
+    // value, then a raw comparison against the registry's string.
+    if py_truthy(&got_model) && got_model != Value::String(model.to_string()) {
         res.fail(
             Status::Wrong,
-            format!("model is {got_model}, registry expects {model}"),
+            format!("model is {}, registry expects {model}", py_str(&got_model)),
         );
     }
 }
@@ -296,52 +301,6 @@ pub fn check_jev_glm(res: &mut CheckResult, cfg: &EngineConfig, c: &mut Client, 
     let r = c.post_with_timeout("/v1/systemone", &body, opts.timeout.max(90.0));
     res.sanity.latency_s = Some(round3(r.elapsed));
     check_systemone(res, &r, &cfg.model, "verdict", "read");
-}
-
-/// Python truthiness for JSON values.
-fn py_truthy(value: &Value) -> bool {
-    match value {
-        Value::Null => false,
-        Value::Bool(value) => *value,
-        Value::Number(value) => value.as_f64().is_some_and(|value| value != 0.0),
-        Value::String(value) => !value.is_empty(),
-        Value::Array(value) => !value.is_empty(),
-        Value::Object(value) => !value.is_empty(),
-    }
-}
-
-/// Python's `str()` for the scalar shapes a health body carries.
-fn py_str(value: &Value) -> String {
-    match value {
-        Value::String(value) => value.clone(),
-        Value::Null => "None".to_string(),
-        Value::Bool(true) => "True".to_string(),
-        Value::Bool(false) => "False".to_string(),
-        Value::Number(value) => value.to_string(),
-        Value::Array(_) | Value::Object(_) => crate::http::py_dumps(value),
-    }
-}
-
-/// Python's `repr()` for the values a choice can hold.
-fn py_repr(value: &Value) -> String {
-    match value {
-        Value::Null => "None".to_string(),
-        Value::Bool(true) => "True".to_string(),
-        Value::Bool(false) => "False".to_string(),
-        Value::Number(value) => value.to_string(),
-        Value::String(value) => format!("'{value}'"),
-        Value::Array(items) => format!(
-            "[{}]",
-            items.iter().map(py_repr).collect::<Vec<_>>().join(", ")
-        ),
-        Value::Object(map) => format!(
-            "{{{}}}",
-            map.iter()
-                .map(|(key, value)| format!("'{key}': {}", py_repr(value)))
-                .collect::<Vec<_>>()
-                .join(", ")
-        ),
-    }
 }
 
 /// Python's `','.join(loaded)`: strings join as-is, a bare string joins its
