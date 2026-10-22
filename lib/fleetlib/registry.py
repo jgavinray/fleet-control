@@ -75,7 +75,7 @@ DEFAULTS: "dict[str, Engine]" = {
     # Qwen is shared: one request at a time, and back off when anyone else is on it.
     "qwen": Engine("qwen", "http://192.168.0.43:8081", "parse", "Qwen3.8-27B-MLX-4bit",
                    k=1, max_inflight=1, share_check=True, temperature=0.0, seed_param=False),
-    # laya (hyper01, P4): Jev-style /v1/systemone, probabilities come back from the service.
+    # laya (hyper01, :8001): Jev-style /v1/systemone, probabilities come back from the service.
     "laya": Engine("laya", "http://192.168.0.44:8001", "systemone", "laya-rl-agent", max_inflight=1),
     # jev-glm (hyper01): the GLM-backed service with the same /v1/systemone wire format.
     "jev-glm": Engine("jev-glm", "http://192.168.0.44:8102", "systemone", "jev-glm-0.1", max_inflight=2),

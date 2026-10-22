@@ -11,7 +11,9 @@
 #     upgrade, lfm2d-assessment, fleet-hosts-plaquedarchon, gemma-tested),
 #     the warm-start block in ~/exomemory/signoff.md, and
 #     ~/.omp/agent/models.yml. Each engine URL was checked with one request
-#     on 10/20/2026.
+#     on 10/20/2026. Hosts, GPUs, ports and supervisor units were re-checked
+#     read-only on 10/22/2026, except hyper03's hardware and plaquedarchon
+#     (not reachable), which are unconfirmed.
 
 # ---------------------------------------------------------------------------
 # ENGINES: every model service fleet-check tests.
@@ -79,12 +81,19 @@ supervisor_unit = "jev-glm.service"
 url = "http://192.168.0.44:8102"
 watchdog_id = ""
 
-# laya: the Tesla P4 decision classifier. Answers /v1/systemone.
+# laya: the decision classifier. Answers /v1/systemone. Run by
+# /storage01/spartan-kev-p4/venv/bin/python -m laya.serve on :8001 (the
+# directory name is a leftover; the Tesla P4 card is out of the machine). It
+# is configured for cuda:0 and the engine reports cuda:0, but hyper01's only
+# GPU is a Tesla T4 and the unit still sets CUDA_VISIBLE_DEVICES=1, which
+# leaves no device visible. The process holds no /dev/nvidia handle (the
+# lfm2d 8B process on the T4 holds 21), so it is probably running on CPU.
+# Checked 10/22/2026; not proven.
 [engines.laya]
 host = "hyper01"
 kind = "laya"
 model = "laya-rl-agent"
-notes = "English checkpoint on the P4. Near chance on the owner's jobs; check that it is up, not that it is good."
+notes = "English checkpoint. The P4 is out of the machine; hyper01 has only a Tesla T4. Reports cuda:0 but the unit pins CUDA_VISIBLE_DEVICES=1 and the process holds no GPU handle, so probably CPU (unproven). Near chance on the owner's jobs; check that it is up, not that it is good."
 supervisor_scope = "system"
 supervisor_unit = "laya.service"
 url = "http://192.168.0.44:8001"
@@ -145,7 +154,8 @@ prompt_logprobs = "no"
 # ---------------------------------------------------------------------------
 
 # Always-on hub. Runs the watchdog, ai-telemetry, Agent Quest, the lfm2d 8B
-# (Tesla T4), laya (Tesla P4) and jev-glm.
+# (Tesla T4, the machine's only GPU), laya (probably CPU only; see the laya
+# engine) and jev-glm.
 [hosts.hyper01]
 ip = "192.168.0.44"
 notes = "Always-on hub. Do not read ~/.bashrc here. Watchdog: llm-watchdog.service."
@@ -175,11 +185,13 @@ notes = "DeepSeek head (rank 0). Supervisor is the USER unit dsv41-boot-start.se
 role = "engine-head"
 ssh_user = "jgavinray"
 
-# DeepSeek worker (rank 1). Only reachable over the private link through spark.
+# DeepSeek worker (rank 1). Reached through spark over the private cable link
+# (192.168.100.11). It also has a LAN address, 192.168.0.180; the Mac's ssh key
+# is refused there, so ssh goes through spark.
 [hosts.spark2]
 behind = "spark"
 ip = "192.168.100.11"
-notes = "DeepSeek worker (rank 1). Reached through spark over the private cable link, no LAN address."
+notes = "DeepSeek worker (rank 1). Reached through spark over the private cable link. Also has LAN address 192.168.0.180, but the Mac's ssh key is refused there."
 role = "engine-worker"
 ssh_user = "jgavinray"
 
