@@ -1,0 +1,387 @@
+[
+ {
+  "input": "ghp_AbCdEf123456GhIjKlMnOpQrStUvWx",
+  "expected": "[REDACTED:github-token]",
+  "rule": "github-token"
+ },
+ {
+  "input": "auth github_pat_11ABCDEFG0abcdefgh_IJKLMNOPQRSTUVWXYZabcdefgh",
+  "expected": "auth [REDACTED:github-token]",
+  "rule": "github-token"
+ },
+ {
+  "input": "ghp_short1",
+  "expected": "[REDACTED:github-token]",
+  "rule": "github-token (6 chars with digit)"
+ },
+ {
+  "input": "loghost_pipeline gh_pool",
+  "expected": "loghost_pipeline gh_pool",
+  "rule": "github-token near-miss"
+ },
+ {
+  "input": "hf_abcdefghijklmnopqrstuvwxyz1234",
+  "expected": "[REDACTED:hf-token]",
+  "rule": "hf-token"
+ },
+ {
+  "input": "hf_Ab123456",
+  "expected": "[REDACTED:hf-token]",
+  "rule": "hf-token short with digit"
+ },
+ {
+  "input": "use hf_tokenizer here",
+  "expected": "use hf_tokenizer here",
+  "rule": "hf-token near-miss"
+ },
+ {
+  "input": "sk-abcdefghij1234567890ABCDEFG",
+  "expected": "[REDACTED:api-key]",
+  "rule": "sk-key"
+ },
+ {
+  "input": "sk-ab1cdef",
+  "expected": "[REDACTED:api-key]",
+  "rule": "sk-key short with digit"
+ },
+ {
+  "input": "sk-abcdef",
+  "expected": "sk-abcdef",
+  "rule": "sk-key near-miss (no digit)"
+ },
+ {
+  "input": "task-runner disk-usage",
+  "expected": "task-runner disk-usage",
+  "rule": "sk-key near-miss"
+ },
+ {
+  "input": "AKIAIOSFODNN7EXAMPLE",
+  "expected": "[REDACTED:aws-key]",
+  "rule": "aws-key"
+ },
+ {
+  "input": "ASIAIOSFODNN7EXAMPLA",
+  "expected": "[REDACTED:aws-key]",
+  "rule": "aws-key (ASIA)"
+ },
+ {
+  "input": "AKIAABCDEF",
+  "expected": "AKIAABCDEF",
+  "rule": "aws-key near-miss? (6 after AKIA)"
+ },
+ {
+  "input": "xoxb-123456789012-abcdef",
+  "expected": "[REDACTED:slack-token]",
+  "rule": "slack-token"
+ },
+ {
+  "input": "xox",
+  "expected": "xox",
+  "rule": "slack-token near-miss"
+ },
+ {
+  "input": "AIzaSyA1234567890abcdefghijklmnopqrstuvw",
+  "expected": "[REDACTED:google-key]w",
+  "rule": "google-key"
+ },
+ {
+  "input": "AIzaSyA1234567890abcdefghijklmnopqrs",
+  "expected": "[REDACTED:base64]",
+  "rule": "google-key near-miss (short)"
+ },
+ {
+  "input": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_Xt0k7t8WGYL0vL6kfEE0",
+  "expected": "[REDACTED:jwt]",
+  "rule": "jwt"
+ },
+ {
+  "input": "eyJhbGciOi.eyJzdWIiOiJ.dozjgNryP4J3j",
+  "expected": "eyJhbGciOi.eyJzdWIiOiJ.dozjgNryP4J3j",
+  "rule": "jwt near-miss (short segments)"
+ },
+ {
+  "input": "-----BEGIN RSA PRIVATE KEY-----\nMIIBOgIBAAJBAKj34GkxFhD90vcNLYLInFEX\n-----END RSA PRIVATE KEY-----\n",
+  "expected": "[REDACTED:pem]\n",
+  "rule": "pem"
+ },
+ {
+  "input": "log line -----BEGIN OPENSSH PRIVATE KEY----- b3NzaGQgbm90IGEgcmVhbCBrZXkgYnV0IGxvb25n",
+  "expected": "log line [REDACTED:pem]",
+  "rule": "pem unterminated"
+ },
+ {
+  "input": "Authorization: Basic QWxhZGRpbjpPcGVuU2VzYW1l",
+  "expected": "Authorization: Basic [REDACTED:auth]",
+  "rule": "auth-header"
+ },
+ {
+  "input": "authorization: $TOKEN",
+  "expected": "authorization: $TOKEN",
+  "rule": "auth-header near-miss (placeholder)"
+ },
+ {
+  "input": "Authorization: Bearer AbCdEf1234567890AbCdEf",
+  "expected": "Authorization: Bearer [REDACTED:bearer]",
+  "rule": "bearer"
+ },
+ {
+  "input": "He is a bearer of news",
+  "expected": "He is a bearer of news",
+  "rule": "bearer near-miss"
+ },
+ {
+  "input": "password=hunter2hunter2",
+  "expected": "password=[REDACTED:secret]",
+  "rule": "key-value"
+ },
+ {
+  "input": "api_key: \"abcd-efgh-1234\"",
+  "expected": "api_key: \"[REDACTED:secret]\"",
+  "rule": "key-value quoted"
+ },
+ {
+  "input": "max_tokens=64 tokenizer=gpt2",
+  "expected": "max_tokens=64 tokenizer=gpt2",
+  "rule": "key-value near-miss (tokens/tokenizer)"
+ },
+ {
+  "input": "password=$PW",
+  "expected": "password=$PW",
+  "rule": "key-value near-miss (placeholder)"
+ },
+ {
+  "input": "password: None",
+  "expected": "password: None",
+  "rule": "key-value near-miss (type word)"
+ },
+ {
+  "input": "password=os.environ[\"PGPASS\"]",
+  "expected": "password=os.environ[\"PGPASS\"]",
+  "rule": "key-value near-miss (code)"
+ },
+ {
+  "input": "Password=hunter2hunter2",
+  "expected": "Password=[REDACTED:secret]",
+  "rule": "key-value case"
+ },
+ {
+  "input": "tool --token mysecretvalue",
+  "expected": "tool --token [REDACTED:secret]",
+  "rule": "secret-flag"
+ },
+ {
+  "input": "tool --password --verbose",
+  "expected": "tool --password --verbose",
+  "rule": "secret-flag near-miss (next flag)"
+ },
+ {
+  "input": "tool --token-file secrets.txt",
+  "expected": "tool --token-file secrets.txt",
+  "rule": "secret-flag near-miss (excluded suffix)"
+ },
+ {
+  "input": "sync --password 'quoted phrase here'",
+  "expected": "sync --password '[REDACTED:secret]'",
+  "rule": "secret-flag quoted"
+ },
+ {
+  "input": "DB_PASS=hunter2hunter2",
+  "expected": "DB_PASS=[REDACTED:password]",
+  "rule": "env-password"
+ },
+ {
+  "input": "DB_PWD=hunter2hunter2",
+  "expected": "DB_PWD=[REDACTED:password]",
+  "rule": "env-password (pwd)"
+ },
+ {
+  "input": "PWD=/tmp/work",
+  "expected": "PWD=/tmp/work",
+  "rule": "env-password near-miss (bare PWD)"
+ },
+ {
+  "input": "PW=${SECRET}",
+  "expected": "PW=${SECRET}",
+  "rule": "env-password near-miss (variable)"
+ },
+ {
+  "input": "surpass=123456789",
+  "expected": "surpass=123456789",
+  "rule": "env-password near-miss (surpass)"
+ },
+ {
+  "input": "PASS=hunter2hunter2",
+  "expected": "PASS=[REDACTED:password]",
+  "rule": "env-password bare PASS"
+ },
+ {
+  "input": "--pw hunter2secret run",
+  "expected": "--pw [REDACTED:password] run",
+  "rule": "pass-flag"
+ },
+ {
+  "input": "--pass --help",
+  "expected": "--pass --help",
+  "rule": "pass-flag near-miss"
+ },
+ {
+  "input": "sshpass -p hunter2secret ssh host",
+  "expected": "sshpass -p [REDACTED:password] ssh host",
+  "rule": "sshpass"
+ },
+ {
+  "input": "ssh -p 22 host",
+  "expected": "ssh -p 22 host",
+  "rule": "sshpass near-miss (ssh port)"
+ },
+ {
+  "input": "mysql -h dbhost -p hunter2secret dbname",
+  "expected": "mysql -h dbhost -p [REDACTED:password] dbname",
+  "rule": "mysql-password"
+ },
+ {
+  "input": "docker login -p hunter2secret registry.example.com:5000",
+  "expected": "docker login -p [REDACTED:password] registry.example.com:5000",
+  "rule": "tool-password (docker)"
+ },
+ {
+  "input": "redis-cli -h host -a hunter2secret keys '*'",
+  "expected": "redis-cli -h host -a [REDACTED:password] keys '*'",
+  "rule": "tool-password (redis)"
+ },
+ {
+  "input": "ldapsearch -x -w hunter2secret",
+  "expected": "ldapsearch -x -w [REDACTED:password]",
+  "rule": "tool-password (ldap)"
+ },
+ {
+  "input": "openssl s_client -connect h:443 -pass pass:hunter2secret",
+  "expected": "openssl s_client -connect h:443 -pass pass:[REDACTED:password]",
+  "rule": "tool-password (openssl)"
+ },
+ {
+  "input": "curl -u admin:hunter2secret http://x/y",
+  "expected": "curl -u admin:[REDACTED:password] http://x/y",
+  "rule": "curl-user"
+ },
+ {
+  "input": "clone http://bob:hunter2secret@example.com/repo.git",
+  "expected": "clone http://bob:[REDACTED:url-password]@example.com/repo.git",
+  "rule": "url-credential"
+ },
+ {
+  "input": "clone http://bob:${PW}@example.com/repo.git",
+  "expected": "clone http://bob:${PW}@example.com/repo.git",
+  "rule": "url-credential near-miss"
+ },
+ {
+  "input": "pw: hunter2secret",
+  "expected": "pw: [REDACTED:password]",
+  "rule": "prose-pw-kv"
+ },
+ {
+  "input": "pw: wrong",
+  "expected": "pw: wrong",
+  "rule": "prose-pw-kv near-miss"
+ },
+ {
+  "input": "the password is hunter2secret",
+  "expected": "the password is [REDACTED:password]",
+  "rule": "prose-is"
+ },
+ {
+  "input": "the password is wrong",
+  "expected": "the password is wrong",
+  "rule": "prose-is near-miss"
+ },
+ {
+  "input": "The pass was changed to hunter2secret",
+  "expected": "The pass was changed to hunter2secret",
+  "rule": "prose-set-to"
+ },
+ {
+  "input": "log in as bob:hunter2secret",
+  "expected": "log in as bob:[REDACTED:password]",
+  "rule": "prose-login-sep"
+ },
+ {
+  "input": "log in as bob password hunter2secret",
+  "expected": "log in as bob password [REDACTED:password]",
+  "rule": "prose-login-pw"
+ },
+ {
+  "input": "user bob password hunter2secret",
+  "expected": "user bob password [REDACTED:password]",
+  "rule": "prose-user-pw"
+ },
+ {
+  "input": "credentials: bob:hunter2secret",
+  "expected": "credentials: bob:[REDACTED:password]",
+  "rule": "prose-creds"
+ },
+ {
+  "input": "mail me at bob@example.com please",
+  "expected": "mail me at [REDACTED:email] please",
+  "rule": "email"
+ },
+ {
+  "input": "git@github.com:owner/repo",
+  "expected": "git@github.com:owner/repo",
+  "rule": "email near-miss (scp-style)"
+ },
+ {
+  "input": "6666cd76f96956469e7be39d750cc7d9",
+  "expected": "6666cd76f96956469e7be39d750cc7d9",
+  "rule": "hex-run near-miss (32 chars)"
+ },
+ {
+  "input": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "expected": "[REDACTED:hex]",
+  "rule": "hex-run"
+ },
+ {
+  "input": "Zm9vYmFyem9vZm9vYmFyem9vZm9vYmFyeTEyMzQ1Njc4OQ==",
+  "expected": "[REDACTED:base64]",
+  "rule": "base64-run"
+ },
+ {
+  "input": "AlphaBravo/CharlieDelta/EchoFoxtrot",
+  "expected": "AlphaBravo/CharlieDelta/EchoFoxtrot",
+  "rule": "base64-run near-miss (wordy path)"
+ },
+ {
+  "input": "aB1cD2eF3gH4iJ5kL6mN7oP8qR9sT0uV-wXyZ0123456789",
+  "expected": "[REDACTED:base64]",
+  "rule": "base64url-run"
+ },
+ {
+  "input": "aB3cD4eF5gH6iJ7kL8mN",
+  "expected": "[REDACTED:token]",
+  "rule": "mixed-token"
+ },
+ {
+  "input": "AbCdEfGhIjKl",
+  "expected": "AbCdEfGhIjKl",
+  "rule": "mixed-token near-miss (no digit)"
+ },
+ {
+  "input": "health: down password=hunter2hunter2",
+  "expected": "health: down password=[REDACTED:secret]",
+  "rule": "fake-fleet-check problem string"
+ },
+ {
+  "input": "password: bob@example.com",
+  "expected": "password: [REDACTED:secret]",
+  "rule": "interaction (kv beats email)"
+ },
+ {
+  "input": "",
+  "expected": "",
+  "rule": "empty"
+ },
+ {
+  "input": "nothing secret at all here",
+  "expected": "nothing secret at all here",
+  "rule": "plain text"
+ }
+]
