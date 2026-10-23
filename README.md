@@ -9,12 +9,20 @@ installer; both have their own README.
 
 ```
 git clone git@github.com:jgavinray/fleet-control.git ~/dev/fleet-control
-ln -sfn ~/dev/fleet-control/check/fleet-check ~/.local/bin/fleet-check
+cd ~/dev/fleet-control && cargo build --release -p fleet-check-rs
+ln -sfn ~/dev/fleet-control/target/release/fleet-check-rs ~/.local/bin/fleet-check
 ~/dev/fleet-control/agents/install.sh      # links ~/.claude/agents/fleet-worker.md
 ```
 
+The registry comes from the clone. A machine that runs an installed binary
+away from the checkout instead keeps its registry at
+`~/.config/fleet-control/fleet.toml` — the same directory as the local LAN
+override (see below). Resolution order: `--registry`, then `$FLEET_REGISTRY`,
+then the binary's own checkout, then that config home, then the working
+directory.
+
 Tests: `check/test.sh` and `lib/test.sh` (Python 3.11 or newer, standard
-library only).
+library only); `crates/gate.sh` for the Rust workspace.
 
 ## The registry and fleet-check
 
@@ -39,8 +47,9 @@ fleet-check --json          # machine-readable output
 fleet-check --force-shared  # also test a shared engine that is busy (see below)
 ```
 
-`~/.local/bin/fleet-check` is a symlink to `check/fleet-check` in this
-repo. It needs Python 3.11 or newer and nothing else.
+`~/.local/bin/fleet-check` is a symlink to `target/release/fleet-check-rs`
+in this repo (the Rust tool; the Python launcher at `check/fleet-check` is
+the parity reference). It needs nothing else at run time.
 
 ### Reading the output
 
@@ -246,6 +255,11 @@ Python-urllib/3.14.
 
 **Known divergences from the Python tool.**
 
+- The default registry search has one extra step: after the binary's own
+  checkout, the Rust tool also consults `~/.config/fleet-control/fleet.toml`
+  (the config home for packaged installs); Python only searches from its
+  script and the working directory. Point the Python tool at such a
+  registry with `$FLEET_REGISTRY`.
 - A timeout applies to the whole request in the Rust tool (ureq's global
   deadline) rather than to each socket operation as in Python: a response
   that trickles in indefinitely in small chunks times out in Rust where
