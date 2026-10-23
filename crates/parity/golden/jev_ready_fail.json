@@ -1,0 +1,86 @@
+{
+  "runs": [
+    {
+      "args": [
+        "--quick",
+        "--json",
+        "--registry",
+        "{registry}",
+        "jev_ready_fail"
+      ],
+      "cwd": null,
+      "engine_order": [
+        "jev_ready_fail"
+      ],
+      "engines": [
+        {
+          "engine": "jev_ready_fail",
+          "features": {},
+          "host": "h-jev_ready_fail",
+          "kind": "jev-glm",
+          "load": "",
+          "model": "M-1",
+          "note_count": 0,
+          "problem_count": 1,
+          "requests": 2,
+          "sanity_latency_is_null": true,
+          "sanity_result": "n/a",
+          "status": "wrong",
+          "url": "http://127.0.0.1:{port}",
+          "verdict": "wrong",
+          "version": ""
+        }
+      ],
+      "env_reg": false,
+      "exit_code": 1,
+      "json_exit_code": 1,
+      "label": "engine jev_ready_fail",
+      "mode": "quick",
+      "python_stderr_head": null,
+      "stderr_empty": true,
+      "stdout_empty": false,
+      "style": "json"
+    },
+    {
+      "args": [
+        "--json",
+        "--registry",
+        "{registry}",
+        "jev_ready_fail"
+      ],
+      "cwd": null,
+      "engine_order": [
+        "jev_ready_fail"
+      ],
+      "engines": [
+        {
+          "engine": "jev_ready_fail",
+          "features": {},
+          "host": "h-jev_ready_fail",
+          "kind": "jev-glm",
+          "load": "",
+          "model": "M-1",
+          "note_count": 0,
+          "problem_count": 1,
+          "requests": 2,
+          "sanity_latency_is_null": true,
+          "sanity_result": "n/a",
+          "status": "wrong",
+          "url": "http://127.0.0.1:{port}",
+          "verdict": "wrong",
+          "version": ""
+        }
+      ],
+      "env_reg": false,
+      "exit_code": 1,
+      "json_exit_code": 1,
+      "label": "engine jev_ready_fail, full mode",
+      "mode": "full",
+      "python_stderr_head": null,
+      "stderr_empty": true,
+      "stdout_empty": false,
+      "style": "json"
+    }
+  ],
+  "scenario": "jev_ready_fail"
+}

@@ -1,0 +1,23 @@
+{
+  "runs": [
+    {
+      "args": [
+        "--quick",
+        "--json",
+        "--registry",
+        "{registry}",
+        "--no-such-flag"
+      ],
+      "cwd": null,
+      "env_reg": false,
+      "exit_code": 1,
+      "label": "bad flag",
+      "mode": "quick",
+      "python_stderr_head": "usage: fleet-check [-h] [--json] [--quick] [--registry REGISTRY]\n                   [--timeout TIMEOUT] [--bg-timeout BG_TIMEOUT]\n                   [--force-shared]\n                   [engine ...]\nfl",
+      "stderr_empty": false,
+      "stdout_empty": true,
+      "style": "usage"
+    }
+  ],
+  "scenario": "bad flag"
+}

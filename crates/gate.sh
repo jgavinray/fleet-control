@@ -5,22 +5,24 @@
 #   1. builds the workspace in release mode and passes `cargo test` (at least
 #      8 tests per crate), `cargo clippy --all-targets -- -D warnings` and
 #      `cargo fmt --check`
-#   2. agrees with the Python fleet-check on a fixture registry served by mock
-#      HTTP engines on loopback (crates/parity.py): --quick --json and full
-#      mode, tensorfold plus the laya, lfm2d and jev-glm kinds, exit code,
-#      engine order, the 14-field comparable projection and whole feature
-#      objects; any stderr on a normal run fails
+#   2. replays the mock-engine scenarios recorded from the Python fleet-check
+#      on 2026-10-22 (crates/parity/golden) against the Rust binary
+#      (crates/parity, binary parity-rs): --quick --json and full mode,
+#      tensorfold plus the laya, lfm2d and jev-glm kinds, exit code, engine
+#      order, the 14-field comparable projection and whole feature objects;
+#      any stderr on a normal run fails
 #   3. changes nothing outside crates/ (checked against the merge-base),
 #      apart from the root .gitignore, which the ignore check below depends on,
 #      and the two workspace manifests (Cargo.toml, Cargo.lock), which adding a
 #      workspace member requires
 #
 # No live engine is ever contacted: the parity harness serves mock engines on
-# loopback only. The Python tool stays ground truth and is never modified.
+# loopback only. The golden files recorded from the Python tool on 2026-10-22
+# are ground truth; no Python runs at gate time.
 set -u
 fail=0
 bad() { echo "GATE FAIL: $*" >&2; fail=1; }
-HERE=$(cd "$(dirname "$0")" && pwd)          # crates/ — where parity.py lives
+HERE=$(cd "$(dirname "$0")" && pwd)          # crates/ — where the parity harness lives
 ROOT=$(cd "$HERE/.." && pwd)                 # repo root (the gate sits one level down)
 cd "$ROOT"
 export PATH="$HOME/.cargo/bin:$PATH"
@@ -30,7 +32,7 @@ export SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX15.4.sdk  # defaul
 CORE=crates/fleet-core
 BINCRATE=crates/fleet-check-rs
 
-[ -f "$ROOT/check/fleet_check.py" ] || { echo "GATE FAIL: the Python fleet-check is gone" >&2; exit 1; }
+[ -d "$HERE/parity/golden" ] || { echo "GATE FAIL: the parity goldens are gone" >&2; exit 1; }
 missing=""
 [ -f "$ROOT/$CORE/Cargo.toml" ] || missing="$missing $CORE/Cargo.toml"
 [ -f "$ROOT/$BINCRATE/Cargo.toml" ] || missing="$missing $BINCRATE/Cargo.toml"
@@ -57,7 +59,10 @@ done
 ( cd "$ROOT" && cargo clippy -p fleet-core -p fleet-check-rs -p fleet-mcp --all-targets --quiet -- -D warnings 2>&1 | tail -20; exit "${PIPESTATUS[0]}" ) || bad "clippy -D warnings failed"
 ( cd "$ROOT" && cargo fmt --check >/dev/null 2>&1 ) || bad "cargo fmt --check failed"
 
-python3 -I "$HERE/parity.py" "$ROOT/check/fleet_check.py" "$BIN" || bad "parity with the Python fleet-check failed"
+( cd "$ROOT" && cargo build --release -p parity --quiet 2>&1 | tail -20; exit "${PIPESTATUS[0]}" ) || bad "cargo build -p parity failed"
+PARITY="$ROOT/target/release/parity-rs"
+[ -x "$PARITY" ] || { echo "GATE FAIL: no binary at target/release/parity-rs (build failed or the bin is not named parity-rs)" >&2; exit 1; }
+"$PARITY" "$BIN" --golden "$HERE/parity/golden" || bad "parity vs the recorded goldens failed"
 
 # No build artifacts committable. The root .gitignore must carry a `target`
 # pattern without a trailing slash: a directory-only pattern cannot match a
@@ -73,8 +78,8 @@ base=$(git merge-base HEAD main 2>/dev/null || git merge-base HEAD origin/main 2
 # Scope: committed or uncommitted work against the merge-base. Only the new
 # crates may change, plus the two workspace manifests that a new member
 # requires; the Python tool, fleet.toml and everything else stay as they are.
-# The gate itself and parity.py live under crates/ and are allowed, as is the
-# root .gitignore the ignore check above depends on.
+# The gate itself and the parity harness live under crates/ and are allowed, as
+# is the root .gitignore the ignore check above depends on.
 changed=$( { git diff --name-only "$base"; git ls-files --others --exclude-standard; } | sort -u)
 for f in $changed; do
   case "$f" in

@@ -1,0 +1,48 @@
+{
+  "runs": [
+    {
+      "args": [
+        "--quick",
+        "--json",
+        "--registry",
+        "{registry}",
+        "--bg-timeout",
+        ".5",
+        "bg_refused"
+      ],
+      "cwd": null,
+      "engine_order": [
+        "bg_refused"
+      ],
+      "engines": [
+        {
+          "engine": "bg_refused",
+          "features": {},
+          "host": "h-bg_refused",
+          "kind": "tensorfold",
+          "load": "idle",
+          "model": "M-1",
+          "note_count": 0,
+          "problem_count": 0,
+          "requests": 3,
+          "sanity_latency_is_null": false,
+          "sanity_result": "pass",
+          "status": "ok",
+          "url": "http://127.0.0.1:{port}",
+          "verdict": "ok",
+          "version": "1.2.3"
+        }
+      ],
+      "env_reg": false,
+      "exit_code": 0,
+      "json_exit_code": 0,
+      "label": "--bg-timeout .5",
+      "mode": "quick",
+      "python_stderr_head": null,
+      "stderr_empty": true,
+      "stdout_empty": false,
+      "style": "json"
+    }
+  ],
+  "scenario": "--bg-timeout .5"
+}

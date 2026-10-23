@@ -1,0 +1,22 @@
+{
+  "runs": [
+    {
+      "args": [
+        "--quick",
+        "--json",
+        "--registry",
+        "{registry_dir}/missing.toml"
+      ],
+      "cwd": null,
+      "env_reg": false,
+      "exit_code": 1,
+      "label": "missing registry",
+      "mode": "quick",
+      "python_stderr_head": "fleet-check: cannot read registry /var/folders/jz/dm970g_97l16sk292c7vydxh0000gn/T/fleetparity-jxrgco9c/missing.toml: [Errno 2] No such file or directory: '/var/folders/jz/dm970g_97l16sk292c7vydxh0000",
+      "stderr_empty": false,
+      "stdout_empty": true,
+      "style": "usage"
+    }
+  ],
+  "scenario": "missing registry"
+}

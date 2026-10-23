@@ -1,0 +1,22 @@
+{
+  "runs": [
+    {
+      "args": [
+        "--quick",
+        "--json",
+        "--registry",
+        "{registry_dir}/bad-engine-entry-is-a-string.toml"
+      ],
+      "cwd": null,
+      "env_reg": false,
+      "exit_code": 1,
+      "label": "malformed registry: engine entry is a string",
+      "mode": "quick",
+      "python_stderr_head": "Traceback (most recent call last):\n  File \"/Users/jgavinray/dev/fleet-control/check/fleet_check.py\", line 760, in <module>\n    sys.exit(main())\n             ~~~~^^\n  File \"/Users/jgavinray/dev/fleet-c",
+      "stderr_empty": false,
+      "stdout_empty": true,
+      "style": "usage"
+    }
+  ],
+  "scenario": "malformed registry: engine entry is a string"
+}

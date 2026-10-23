@@ -1,0 +1,40 @@
+{
+  "runs": [
+    {
+      "args": [
+        "--quick",
+        "--json",
+        "--registry",
+        "{registry}",
+        "model_ids_int"
+      ],
+      "cwd": null,
+      "env_reg": false,
+      "exit_code": 1,
+      "label": "engine model_ids_int",
+      "mode": "quick",
+      "python_stderr_head": "Traceback (most recent call last):\n  File \"/Users/jgavinray/dev/fleet-control/check/fleet_check.py\", line 760, in <module>\n    sys.exit(main())\n             ~~~~^^\n  File \"/Users/jgavinray/dev/fleet-c",
+      "stderr_empty": false,
+      "stdout_empty": true,
+      "style": "usage"
+    },
+    {
+      "args": [
+        "--json",
+        "--registry",
+        "{registry}",
+        "model_ids_int"
+      ],
+      "cwd": null,
+      "env_reg": false,
+      "exit_code": 1,
+      "label": "engine model_ids_int, full mode",
+      "mode": "full",
+      "python_stderr_head": "Traceback (most recent call last):\n  File \"/Users/jgavinray/dev/fleet-control/check/fleet_check.py\", line 760, in <module>\n    sys.exit(main())\n             ~~~~^^\n  File \"/Users/jgavinray/dev/fleet-c",
+      "stderr_empty": false,
+      "stdout_empty": true,
+      "style": "usage"
+    }
+  ],
+  "scenario": "model_ids_int"
+}

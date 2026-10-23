@@ -1,0 +1,111 @@
+{
+  "runs": [
+    {
+      "args": [
+        "--quick",
+        "--json",
+        "--registry",
+        "{registry}",
+        "shared_float_busy"
+      ],
+      "cwd": null,
+      "engine_order": [
+        "shared_float_busy"
+      ],
+      "engines": [
+        {
+          "engine": "shared_float_busy",
+          "features": {},
+          "host": "h-shared_float_busy",
+          "kind": "tensorfold",
+          "load": "busy (1.0 running, 0 waiting)",
+          "model": "M-1",
+          "note_count": 1,
+          "problem_count": 0,
+          "requests": 1,
+          "sanity_latency_is_null": true,
+          "sanity_result": "skipped",
+          "status": "skipped-busy",
+          "url": "http://127.0.0.1:{port}",
+          "verdict": "ok",
+          "version": "1.2.3"
+        }
+      ],
+      "env_reg": false,
+      "exit_code": 0,
+      "json_exit_code": 0,
+      "label": "engine shared_float_busy",
+      "mode": "quick",
+      "python_stderr_head": null,
+      "stderr_empty": true,
+      "stdout_empty": false,
+      "style": "json"
+    },
+    {
+      "args": [
+        "--json",
+        "--registry",
+        "{registry}",
+        "shared_float_busy"
+      ],
+      "cwd": null,
+      "engine_order": [
+        "shared_float_busy"
+      ],
+      "engines": [
+        {
+          "engine": "shared_float_busy",
+          "features": {
+            "background_priority": {
+              "drift": false,
+              "expected": null,
+              "reason": "shared engine busy",
+              "result": "skipped"
+            },
+            "guided_choice": {
+              "drift": false,
+              "expected": null,
+              "reason": "shared engine busy",
+              "result": "skipped"
+            },
+            "logprobs": {
+              "drift": false,
+              "expected": null,
+              "reason": "shared engine busy",
+              "result": "skipped"
+            },
+            "prompt_logprobs": {
+              "drift": false,
+              "expected": null,
+              "reason": "shared engine busy",
+              "result": "skipped"
+            }
+          },
+          "host": "h-shared_float_busy",
+          "kind": "tensorfold",
+          "load": "busy (1.0 running, 0 waiting)",
+          "model": "M-1",
+          "note_count": 1,
+          "problem_count": 0,
+          "requests": 1,
+          "sanity_latency_is_null": true,
+          "sanity_result": "skipped",
+          "status": "skipped-busy",
+          "url": "http://127.0.0.1:{port}",
+          "verdict": "ok",
+          "version": "1.2.3"
+        }
+      ],
+      "env_reg": false,
+      "exit_code": 0,
+      "json_exit_code": 0,
+      "label": "engine shared_float_busy, full mode",
+      "mode": "full",
+      "python_stderr_head": null,
+      "stderr_empty": true,
+      "stdout_empty": false,
+      "style": "json"
+    }
+  ],
+  "scenario": "shared_float_busy"
+}

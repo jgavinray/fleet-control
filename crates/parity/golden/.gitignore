@@ -1,0 +1,3 @@
+# The recorded verdicts are data, not build output. A user-global `*.json`
+# ignore must not hide them: this file's negation wins over core.excludesFile.
+!*.json

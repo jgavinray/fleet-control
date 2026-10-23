@@ -1,0 +1,86 @@
+{
+  "runs": [
+    {
+      "args": [
+        "--quick",
+        "--json",
+        "--registry",
+        "{registry}",
+        "laya_neg_inf_probability"
+      ],
+      "cwd": null,
+      "engine_order": [
+        "laya_neg_inf_probability"
+      ],
+      "engines": [
+        {
+          "engine": "laya_neg_inf_probability",
+          "features": {},
+          "host": "h-laya_neg_inf_probability",
+          "kind": "laya",
+          "load": "",
+          "model": "M-1",
+          "note_count": 1,
+          "problem_count": 0,
+          "requests": 2,
+          "sanity_latency_is_null": false,
+          "sanity_result": "pass",
+          "status": "ok",
+          "url": "http://127.0.0.1:{port}",
+          "verdict": "ok",
+          "version": ""
+        }
+      ],
+      "env_reg": false,
+      "exit_code": 0,
+      "json_exit_code": 0,
+      "label": "engine laya_neg_inf_probability",
+      "mode": "quick",
+      "python_stderr_head": null,
+      "stderr_empty": true,
+      "stdout_empty": false,
+      "style": "json"
+    },
+    {
+      "args": [
+        "--json",
+        "--registry",
+        "{registry}",
+        "laya_neg_inf_probability"
+      ],
+      "cwd": null,
+      "engine_order": [
+        "laya_neg_inf_probability"
+      ],
+      "engines": [
+        {
+          "engine": "laya_neg_inf_probability",
+          "features": {},
+          "host": "h-laya_neg_inf_probability",
+          "kind": "laya",
+          "load": "",
+          "model": "M-1",
+          "note_count": 1,
+          "problem_count": 0,
+          "requests": 2,
+          "sanity_latency_is_null": false,
+          "sanity_result": "pass",
+          "status": "ok",
+          "url": "http://127.0.0.1:{port}",
+          "verdict": "ok",
+          "version": ""
+        }
+      ],
+      "env_reg": false,
+      "exit_code": 0,
+      "json_exit_code": 0,
+      "label": "engine laya_neg_inf_probability, full mode",
+      "mode": "full",
+      "python_stderr_head": null,
+      "stderr_empty": true,
+      "stdout_empty": false,
+      "style": "json"
+    }
+  ],
+  "scenario": "laya_neg_inf_probability"
+}

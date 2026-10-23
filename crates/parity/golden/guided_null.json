@@ -1,0 +1,111 @@
+{
+  "runs": [
+    {
+      "args": [
+        "--quick",
+        "--json",
+        "--registry",
+        "{registry}",
+        "guided_null"
+      ],
+      "cwd": null,
+      "engine_order": [
+        "guided_null"
+      ],
+      "engines": [
+        {
+          "engine": "guided_null",
+          "features": {},
+          "host": "h-guided_null",
+          "kind": "tensorfold",
+          "load": "idle",
+          "model": "M-1",
+          "note_count": 0,
+          "problem_count": 0,
+          "requests": 2,
+          "sanity_latency_is_null": false,
+          "sanity_result": "pass",
+          "status": "ok",
+          "url": "http://127.0.0.1:{port}",
+          "verdict": "ok",
+          "version": "1.2.3"
+        }
+      ],
+      "env_reg": false,
+      "exit_code": 0,
+      "json_exit_code": 0,
+      "label": "engine guided_null",
+      "mode": "quick",
+      "python_stderr_head": null,
+      "stderr_empty": true,
+      "stdout_empty": false,
+      "style": "json"
+    },
+    {
+      "args": [
+        "--json",
+        "--registry",
+        "{registry}",
+        "guided_null"
+      ],
+      "cwd": null,
+      "engine_order": [
+        "guided_null"
+      ],
+      "engines": [
+        {
+          "engine": "guided_null",
+          "features": {
+            "background_priority": {
+              "drift": false,
+              "expected": null,
+              "reason": "accepted (HTTP 200)",
+              "result": "yes"
+            },
+            "guided_choice": {
+              "drift": false,
+              "expected": null,
+              "reason": "HTTP 200 but content was null (guidance ignored, or token budget spent thinking)",
+              "result": "no"
+            },
+            "logprobs": {
+              "drift": false,
+              "expected": null,
+              "reason": "logprobs returned",
+              "result": "yes"
+            },
+            "prompt_logprobs": {
+              "drift": false,
+              "expected": null,
+              "reason": "HTTP 404: no route",
+              "result": "no"
+            }
+          },
+          "host": "h-guided_null",
+          "kind": "tensorfold",
+          "load": "idle",
+          "model": "M-1",
+          "note_count": 0,
+          "problem_count": 0,
+          "requests": 6,
+          "sanity_latency_is_null": false,
+          "sanity_result": "pass",
+          "status": "ok",
+          "url": "http://127.0.0.1:{port}",
+          "verdict": "ok",
+          "version": "1.2.3"
+        }
+      ],
+      "env_reg": false,
+      "exit_code": 0,
+      "json_exit_code": 0,
+      "label": "engine guided_null, full mode",
+      "mode": "full",
+      "python_stderr_head": null,
+      "stderr_empty": true,
+      "stdout_empty": false,
+      "style": "json"
+    }
+  ],
+  "scenario": "guided_null"
+}

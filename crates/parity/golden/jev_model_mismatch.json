@@ -1,0 +1,86 @@
+{
+  "runs": [
+    {
+      "args": [
+        "--quick",
+        "--json",
+        "--registry",
+        "{registry}",
+        "jev_model_mismatch"
+      ],
+      "cwd": null,
+      "engine_order": [
+        "jev_model_mismatch"
+      ],
+      "engines": [
+        {
+          "engine": "jev_model_mismatch",
+          "features": {},
+          "host": "h-jev_model_mismatch",
+          "kind": "jev-glm",
+          "load": "",
+          "model": "Other",
+          "note_count": 0,
+          "problem_count": 1,
+          "requests": 3,
+          "sanity_latency_is_null": false,
+          "sanity_result": "pass",
+          "status": "wrong",
+          "url": "http://127.0.0.1:{port}",
+          "verdict": "wrong",
+          "version": ""
+        }
+      ],
+      "env_reg": false,
+      "exit_code": 1,
+      "json_exit_code": 1,
+      "label": "engine jev_model_mismatch",
+      "mode": "quick",
+      "python_stderr_head": null,
+      "stderr_empty": true,
+      "stdout_empty": false,
+      "style": "json"
+    },
+    {
+      "args": [
+        "--json",
+        "--registry",
+        "{registry}",
+        "jev_model_mismatch"
+      ],
+      "cwd": null,
+      "engine_order": [
+        "jev_model_mismatch"
+      ],
+      "engines": [
+        {
+          "engine": "jev_model_mismatch",
+          "features": {},
+          "host": "h-jev_model_mismatch",
+          "kind": "jev-glm",
+          "load": "",
+          "model": "Other",
+          "note_count": 0,
+          "problem_count": 1,
+          "requests": 3,
+          "sanity_latency_is_null": false,
+          "sanity_result": "pass",
+          "status": "wrong",
+          "url": "http://127.0.0.1:{port}",
+          "verdict": "wrong",
+          "version": ""
+        }
+      ],
+      "env_reg": false,
+      "exit_code": 1,
+      "json_exit_code": 1,
+      "label": "engine jev_model_mismatch, full mode",
+      "mode": "full",
+      "python_stderr_head": null,
+      "stderr_empty": true,
+      "stdout_empty": false,
+      "style": "json"
+    }
+  ],
+  "scenario": "jev_model_mismatch"
+}

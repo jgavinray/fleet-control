@@ -1,0 +1,23 @@
+{
+  "runs": [
+    {
+      "args": [
+        "--quick",
+        "--json",
+        "--registry",
+        "{registry}",
+        "nope"
+      ],
+      "cwd": null,
+      "env_reg": false,
+      "exit_code": 1,
+      "label": "unknown engine",
+      "mode": "quick",
+      "python_stderr_head": "fleet-check: unknown engine nope; known: 9lives, Zeta, a-b_c, alpha, bg_accepted, bg_refused, bg_refused_sanity_no, bg_refused_sanity_yes, busy_load, chat_ignored_nan, expected_logprobs_one, guided_nu",
+      "stderr_empty": false,
+      "stdout_empty": true,
+      "style": "usage"
+    }
+  ],
+  "scenario": "unknown engine"
+}

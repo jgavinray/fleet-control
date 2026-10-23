@@ -1,0 +1,86 @@
+{
+  "runs": [
+    {
+      "args": [
+        "--quick",
+        "--json",
+        "--registry",
+        "{registry}",
+        "lfm2d_specs_empty"
+      ],
+      "cwd": null,
+      "engine_order": [
+        "lfm2d_specs_empty"
+      ],
+      "engines": [
+        {
+          "engine": "lfm2d_specs_empty",
+          "features": {},
+          "host": "h-lfm2d_specs_empty",
+          "kind": "lfm2d",
+          "load": "",
+          "model": "M-1",
+          "note_count": 0,
+          "problem_count": 1,
+          "requests": 2,
+          "sanity_latency_is_null": false,
+          "sanity_result": "fail",
+          "status": "wrong",
+          "url": "http://127.0.0.1:{port}",
+          "verdict": "wrong",
+          "version": ""
+        }
+      ],
+      "env_reg": false,
+      "exit_code": 1,
+      "json_exit_code": 1,
+      "label": "engine lfm2d_specs_empty",
+      "mode": "quick",
+      "python_stderr_head": null,
+      "stderr_empty": true,
+      "stdout_empty": false,
+      "style": "json"
+    },
+    {
+      "args": [
+        "--json",
+        "--registry",
+        "{registry}",
+        "lfm2d_specs_empty"
+      ],
+      "cwd": null,
+      "engine_order": [
+        "lfm2d_specs_empty"
+      ],
+      "engines": [
+        {
+          "engine": "lfm2d_specs_empty",
+          "features": {},
+          "host": "h-lfm2d_specs_empty",
+          "kind": "lfm2d",
+          "load": "",
+          "model": "M-1",
+          "note_count": 0,
+          "problem_count": 1,
+          "requests": 2,
+          "sanity_latency_is_null": false,
+          "sanity_result": "fail",
+          "status": "wrong",
+          "url": "http://127.0.0.1:{port}",
+          "verdict": "wrong",
+          "version": ""
+        }
+      ],
+      "env_reg": false,
+      "exit_code": 1,
+      "json_exit_code": 1,
+      "label": "engine lfm2d_specs_empty, full mode",
+      "mode": "full",
+      "python_stderr_head": null,
+      "stderr_empty": true,
+      "stdout_empty": false,
+      "style": "json"
+    }
+  ],
+  "scenario": "lfm2d_specs_empty"
+}

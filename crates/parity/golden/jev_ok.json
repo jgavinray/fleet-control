@@ -1,0 +1,86 @@
+{
+  "runs": [
+    {
+      "args": [
+        "--quick",
+        "--json",
+        "--registry",
+        "{registry}",
+        "jev_ok"
+      ],
+      "cwd": null,
+      "engine_order": [
+        "jev_ok"
+      ],
+      "engines": [
+        {
+          "engine": "jev_ok",
+          "features": {},
+          "host": "h-jev_ok",
+          "kind": "jev-glm",
+          "load": "",
+          "model": "M-1",
+          "note_count": 0,
+          "problem_count": 0,
+          "requests": 3,
+          "sanity_latency_is_null": false,
+          "sanity_result": "pass",
+          "status": "ok",
+          "url": "http://127.0.0.1:{port}",
+          "verdict": "ok",
+          "version": ""
+        }
+      ],
+      "env_reg": false,
+      "exit_code": 0,
+      "json_exit_code": 0,
+      "label": "engine jev_ok",
+      "mode": "quick",
+      "python_stderr_head": null,
+      "stderr_empty": true,
+      "stdout_empty": false,
+      "style": "json"
+    },
+    {
+      "args": [
+        "--json",
+        "--registry",
+        "{registry}",
+        "jev_ok"
+      ],
+      "cwd": null,
+      "engine_order": [
+        "jev_ok"
+      ],
+      "engines": [
+        {
+          "engine": "jev_ok",
+          "features": {},
+          "host": "h-jev_ok",
+          "kind": "jev-glm",
+          "load": "",
+          "model": "M-1",
+          "note_count": 0,
+          "problem_count": 0,
+          "requests": 3,
+          "sanity_latency_is_null": false,
+          "sanity_result": "pass",
+          "status": "ok",
+          "url": "http://127.0.0.1:{port}",
+          "verdict": "ok",
+          "version": ""
+        }
+      ],
+      "env_reg": false,
+      "exit_code": 0,
+      "json_exit_code": 0,
+      "label": "engine jev_ok, full mode",
+      "mode": "full",
+      "python_stderr_head": null,
+      "stderr_empty": true,
+      "stdout_empty": false,
+      "style": "json"
+    }
+  ],
+  "scenario": "jev_ok"
+}

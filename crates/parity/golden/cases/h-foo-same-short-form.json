@@ -1,0 +1,19 @@
+{
+  "runs": [
+    {
+      "args": [
+        "-h=foo"
+      ],
+      "cwd": null,
+      "env_reg": false,
+      "exit_code": 1,
+      "label": "-h=foo (same, short form)",
+      "mode": "full",
+      "python_stderr_head": "usage: fleet-check [-h] [--json] [--quick] [--registry REGISTRY]\n                   [--timeout TIMEOUT] [--bg-timeout BG_TIMEOUT]\n                   [--force-shared]\n                   [engine ...]\nfl",
+      "stderr_empty": false,
+      "stdout_empty": true,
+      "style": "usage"
+    }
+  ],
+  "scenario": "-h=foo (same, short form)"
+}

@@ -1,0 +1,89 @@
+{
+  "runs": [
+    {
+      "args": [
+        "--json",
+        "--registry",
+        "{registry}",
+        "not_ok",
+        "lp_drift"
+      ],
+      "cwd": null,
+      "engine_order": [
+        "not_ok",
+        "lp_drift"
+      ],
+      "engines": [
+        {
+          "engine": "not_ok",
+          "features": {},
+          "host": "h-not_ok",
+          "kind": "tensorfold",
+          "load": "",
+          "model": "",
+          "note_count": 0,
+          "problem_count": 1,
+          "requests": 1,
+          "sanity_latency_is_null": true,
+          "sanity_result": "n/a",
+          "status": "down",
+          "url": "http://127.0.0.1:{port}",
+          "verdict": "down",
+          "version": ""
+        },
+        {
+          "engine": "lp_drift",
+          "features": {
+            "background_priority": {
+              "drift": false,
+              "expected": null,
+              "reason": "accepted (HTTP 200)",
+              "result": "yes"
+            },
+            "guided_choice": {
+              "drift": false,
+              "expected": null,
+              "reason": "answered 'apple'",
+              "result": "yes"
+            },
+            "logprobs": {
+              "drift": true,
+              "expected": "yes",
+              "reason": "HTTP 200 but no logprobs in the answer (silently ignored)",
+              "result": "no"
+            },
+            "prompt_logprobs": {
+              "drift": false,
+              "expected": null,
+              "reason": "prompt_logprobs returned",
+              "result": "yes"
+            }
+          },
+          "host": "h-lp_drift",
+          "kind": "tensorfold",
+          "load": "idle",
+          "model": "M-1",
+          "note_count": 0,
+          "problem_count": 0,
+          "requests": 6,
+          "sanity_latency_is_null": false,
+          "sanity_result": "pass",
+          "status": "ok",
+          "url": "http://127.0.0.1:{port}",
+          "verdict": "drift",
+          "version": "1.2.3"
+        }
+      ],
+      "env_reg": false,
+      "exit_code": 1,
+      "json_exit_code": 1,
+      "label": "down and drift combined (exit 1 wins)",
+      "mode": "full",
+      "python_stderr_head": null,
+      "stderr_empty": true,
+      "stdout_empty": false,
+      "style": "json"
+    }
+  ],
+  "scenario": "down and drift combined (exit 1 wins)"
+}

@@ -1,0 +1,20 @@
+{
+  "runs": [
+    {
+      "args": [
+        "-hfoo"
+      ],
+      "cwd": null,
+      "env_reg": false,
+      "exit_code": 0,
+      "help_text": "usage: fleet-check [-h] [--json] [--quick] [--registry REGISTRY]\n                   [--timeout TIMEOUT] [--bg-timeout BG_TIMEOUT]\n                   [--force-shared]\n                   [engine ...]\n\nCheck that every model engine in fleet.toml is up and behaving.\n\npositional arguments:\n  engine                engine name(s) to check (default: all)\n\noptions:\n  -h, --help            show this help message and exit\n  --json                print JSON instead of a table\n  --quick               skip the feature probes\n  --registry REGISTRY   path to fleet.toml\n  --timeout TIMEOUT     seconds per request (default 60)\n  --bg-timeout BG_TIMEOUT\n                        seconds a background-priority sanity request may wait\n                        before it is re-sent once at normal priority (default\n                        20)\n  --force-shared        run sanity and probes on a shared engine even if it is\n                        busy\n\nExit 0 all good, 1 an engine is down or wrong, 2 only feature drift.\n",
+      "label": "-hfoo (an attached value is ignored, help is printed)",
+      "mode": "help",
+      "python_stderr_head": null,
+      "stderr_empty": true,
+      "stdout_empty": false,
+      "style": "help"
+    }
+  ],
+  "scenario": "-hfoo (an attached value is ignored, help is printed)"
+}

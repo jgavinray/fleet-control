@@ -1,0 +1,86 @@
+{
+  "runs": [
+    {
+      "args": [
+        "--quick",
+        "--json",
+        "--registry",
+        "{registry}",
+        "health_500"
+      ],
+      "cwd": null,
+      "engine_order": [
+        "health_500"
+      ],
+      "engines": [
+        {
+          "engine": "health_500",
+          "features": {},
+          "host": "h-health_500",
+          "kind": "tensorfold",
+          "load": "",
+          "model": "",
+          "note_count": 0,
+          "problem_count": 1,
+          "requests": 1,
+          "sanity_latency_is_null": true,
+          "sanity_result": "n/a",
+          "status": "down",
+          "url": "http://127.0.0.1:{port}",
+          "verdict": "down",
+          "version": ""
+        }
+      ],
+      "env_reg": false,
+      "exit_code": 1,
+      "json_exit_code": 1,
+      "label": "engine health_500",
+      "mode": "quick",
+      "python_stderr_head": null,
+      "stderr_empty": true,
+      "stdout_empty": false,
+      "style": "json"
+    },
+    {
+      "args": [
+        "--json",
+        "--registry",
+        "{registry}",
+        "health_500"
+      ],
+      "cwd": null,
+      "engine_order": [
+        "health_500"
+      ],
+      "engines": [
+        {
+          "engine": "health_500",
+          "features": {},
+          "host": "h-health_500",
+          "kind": "tensorfold",
+          "load": "",
+          "model": "",
+          "note_count": 0,
+          "problem_count": 1,
+          "requests": 1,
+          "sanity_latency_is_null": true,
+          "sanity_result": "n/a",
+          "status": "down",
+          "url": "http://127.0.0.1:{port}",
+          "verdict": "down",
+          "version": ""
+        }
+      ],
+      "env_reg": false,
+      "exit_code": 1,
+      "json_exit_code": 1,
+      "label": "engine health_500, full mode",
+      "mode": "full",
+      "python_stderr_head": null,
+      "stderr_empty": true,
+      "stdout_empty": false,
+      "style": "json"
+    }
+  ],
+  "scenario": "health_500"
+}

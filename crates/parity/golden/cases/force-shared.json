@@ -1,0 +1,47 @@
+{
+  "runs": [
+    {
+      "args": [
+        "--quick",
+        "--json",
+        "--force-shared",
+        "--registry",
+        "{registry}",
+        "shared_busy"
+      ],
+      "cwd": null,
+      "engine_order": [
+        "shared_busy"
+      ],
+      "engines": [
+        {
+          "engine": "shared_busy",
+          "features": {},
+          "host": "h-shared_busy",
+          "kind": "tensorfold",
+          "load": "busy (2 running, 0 waiting)",
+          "model": "M-1",
+          "note_count": 0,
+          "problem_count": 0,
+          "requests": 2,
+          "sanity_latency_is_null": false,
+          "sanity_result": "pass",
+          "status": "ok",
+          "url": "http://127.0.0.1:{port}",
+          "verdict": "ok",
+          "version": "1.2.3"
+        }
+      ],
+      "env_reg": false,
+      "exit_code": 0,
+      "json_exit_code": 0,
+      "label": "--force-shared",
+      "mode": "quick",
+      "python_stderr_head": null,
+      "stderr_empty": true,
+      "stdout_empty": false,
+      "style": "json"
+    }
+  ],
+  "scenario": "--force-shared"
+}

@@ -1,0 +1,65 @@
+{
+  "runs": [
+    {
+      "args": [
+        "--quick",
+        "--json",
+        "--registry",
+        "{registry}",
+        "wrong_model",
+        "ok_ids_in_health"
+      ],
+      "cwd": null,
+      "engine_order": [
+        "wrong_model",
+        "ok_ids_in_health"
+      ],
+      "engines": [
+        {
+          "engine": "wrong_model",
+          "features": {},
+          "host": "h-wrong_model",
+          "kind": "tensorfold",
+          "load": "idle",
+          "model": "Other",
+          "note_count": 0,
+          "problem_count": 1,
+          "requests": 1,
+          "sanity_latency_is_null": true,
+          "sanity_result": "n/a",
+          "status": "wrong",
+          "url": "http://127.0.0.1:{port}",
+          "verdict": "wrong",
+          "version": "1.2.3"
+        },
+        {
+          "engine": "ok_ids_in_health",
+          "features": {},
+          "host": "h-ok_ids_in_health",
+          "kind": "tensorfold",
+          "load": "idle",
+          "model": "M-1",
+          "note_count": 0,
+          "problem_count": 0,
+          "requests": 2,
+          "sanity_latency_is_null": false,
+          "sanity_result": "pass",
+          "status": "ok",
+          "url": "http://127.0.0.1:{port}",
+          "verdict": "ok",
+          "version": "1.2.3"
+        }
+      ],
+      "env_reg": false,
+      "exit_code": 1,
+      "json_exit_code": 1,
+      "label": "two engines in the order given",
+      "mode": "quick",
+      "python_stderr_head": null,
+      "stderr_empty": true,
+      "stdout_empty": false,
+      "style": "json"
+    }
+  ],
+  "scenario": "two engines in the order given"
+}

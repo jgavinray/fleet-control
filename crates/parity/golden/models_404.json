@@ -1,0 +1,86 @@
+{
+  "runs": [
+    {
+      "args": [
+        "--quick",
+        "--json",
+        "--registry",
+        "{registry}",
+        "models_404"
+      ],
+      "cwd": null,
+      "engine_order": [
+        "models_404"
+      ],
+      "engines": [
+        {
+          "engine": "models_404",
+          "features": {},
+          "host": "h-models_404",
+          "kind": "tensorfold",
+          "load": "",
+          "model": "",
+          "note_count": 0,
+          "problem_count": 1,
+          "requests": 2,
+          "sanity_latency_is_null": true,
+          "sanity_result": "n/a",
+          "status": "down",
+          "url": "http://127.0.0.1:{port}",
+          "verdict": "down",
+          "version": ""
+        }
+      ],
+      "env_reg": false,
+      "exit_code": 1,
+      "json_exit_code": 1,
+      "label": "engine models_404",
+      "mode": "quick",
+      "python_stderr_head": null,
+      "stderr_empty": true,
+      "stdout_empty": false,
+      "style": "json"
+    },
+    {
+      "args": [
+        "--json",
+        "--registry",
+        "{registry}",
+        "models_404"
+      ],
+      "cwd": null,
+      "engine_order": [
+        "models_404"
+      ],
+      "engines": [
+        {
+          "engine": "models_404",
+          "features": {},
+          "host": "h-models_404",
+          "kind": "tensorfold",
+          "load": "",
+          "model": "",
+          "note_count": 0,
+          "problem_count": 1,
+          "requests": 2,
+          "sanity_latency_is_null": true,
+          "sanity_result": "n/a",
+          "status": "down",
+          "url": "http://127.0.0.1:{port}",
+          "verdict": "down",
+          "version": ""
+        }
+      ],
+      "env_reg": false,
+      "exit_code": 1,
+      "json_exit_code": 1,
+      "label": "engine models_404, full mode",
+      "mode": "full",
+      "python_stderr_head": null,
+      "stderr_empty": true,
+      "stdout_empty": false,
+      "style": "json"
+    }
+  ],
+  "scenario": "models_404"
+}

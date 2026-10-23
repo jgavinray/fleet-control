@@ -1,0 +1,48 @@
+{
+  "runs": [
+    {
+      "args": [
+        "--quick",
+        "--json",
+        "--registry",
+        "{registry}",
+        "--timeout",
+        "1e400",
+        "9lives"
+      ],
+      "cwd": null,
+      "engine_order": [
+        "9lives"
+      ],
+      "engines": [
+        {
+          "engine": "9lives",
+          "features": {},
+          "host": "h-9lives",
+          "kind": "tensorfold",
+          "load": "",
+          "model": "",
+          "note_count": 0,
+          "problem_count": 1,
+          "requests": 1,
+          "sanity_latency_is_null": true,
+          "sanity_result": "n/a",
+          "status": "down",
+          "url": "http://127.0.0.1:{port}",
+          "verdict": "down",
+          "version": ""
+        }
+      ],
+      "env_reg": false,
+      "exit_code": 1,
+      "json_exit_code": 1,
+      "label": "--timeout 1e400 (overflows to infinity, same shape)",
+      "mode": "quick",
+      "python_stderr_head": null,
+      "stderr_empty": true,
+      "stdout_empty": false,
+      "style": "json"
+    }
+  ],
+  "scenario": "--timeout 1e400 (overflows to infinity, same shape)"
+}

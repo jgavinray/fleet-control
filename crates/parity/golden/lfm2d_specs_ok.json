@@ -1,0 +1,86 @@
+{
+  "runs": [
+    {
+      "args": [
+        "--quick",
+        "--json",
+        "--registry",
+        "{registry}",
+        "lfm2d_specs_ok"
+      ],
+      "cwd": null,
+      "engine_order": [
+        "lfm2d_specs_ok"
+      ],
+      "engines": [
+        {
+          "engine": "lfm2d_specs_ok",
+          "features": {},
+          "host": "h-lfm2d_specs_ok",
+          "kind": "lfm2d",
+          "load": "",
+          "model": "M-1",
+          "note_count": 0,
+          "problem_count": 0,
+          "requests": 2,
+          "sanity_latency_is_null": false,
+          "sanity_result": "pass",
+          "status": "ok",
+          "url": "http://127.0.0.1:{port}",
+          "verdict": "ok",
+          "version": ""
+        }
+      ],
+      "env_reg": false,
+      "exit_code": 0,
+      "json_exit_code": 0,
+      "label": "engine lfm2d_specs_ok",
+      "mode": "quick",
+      "python_stderr_head": null,
+      "stderr_empty": true,
+      "stdout_empty": false,
+      "style": "json"
+    },
+    {
+      "args": [
+        "--json",
+        "--registry",
+        "{registry}",
+        "lfm2d_specs_ok"
+      ],
+      "cwd": null,
+      "engine_order": [
+        "lfm2d_specs_ok"
+      ],
+      "engines": [
+        {
+          "engine": "lfm2d_specs_ok",
+          "features": {},
+          "host": "h-lfm2d_specs_ok",
+          "kind": "lfm2d",
+          "load": "",
+          "model": "M-1",
+          "note_count": 0,
+          "problem_count": 0,
+          "requests": 2,
+          "sanity_latency_is_null": false,
+          "sanity_result": "pass",
+          "status": "ok",
+          "url": "http://127.0.0.1:{port}",
+          "verdict": "ok",
+          "version": ""
+        }
+      ],
+      "env_reg": false,
+      "exit_code": 0,
+      "json_exit_code": 0,
+      "label": "engine lfm2d_specs_ok, full mode",
+      "mode": "full",
+      "python_stderr_head": null,
+      "stderr_empty": true,
+      "stdout_empty": false,
+      "style": "json"
+    }
+  ],
+  "scenario": "lfm2d_specs_ok"
+}

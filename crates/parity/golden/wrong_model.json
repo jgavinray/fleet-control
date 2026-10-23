@@ -1,0 +1,86 @@
+{
+  "runs": [
+    {
+      "args": [
+        "--quick",
+        "--json",
+        "--registry",
+        "{registry}",
+        "wrong_model"
+      ],
+      "cwd": null,
+      "engine_order": [
+        "wrong_model"
+      ],
+      "engines": [
+        {
+          "engine": "wrong_model",
+          "features": {},
+          "host": "h-wrong_model",
+          "kind": "tensorfold",
+          "load": "idle",
+          "model": "Other",
+          "note_count": 0,
+          "problem_count": 1,
+          "requests": 1,
+          "sanity_latency_is_null": true,
+          "sanity_result": "n/a",
+          "status": "wrong",
+          "url": "http://127.0.0.1:{port}",
+          "verdict": "wrong",
+          "version": "1.2.3"
+        }
+      ],
+      "env_reg": false,
+      "exit_code": 1,
+      "json_exit_code": 1,
+      "label": "engine wrong_model",
+      "mode": "quick",
+      "python_stderr_head": null,
+      "stderr_empty": true,
+      "stdout_empty": false,
+      "style": "json"
+    },
+    {
+      "args": [
+        "--json",
+        "--registry",
+        "{registry}",
+        "wrong_model"
+      ],
+      "cwd": null,
+      "engine_order": [
+        "wrong_model"
+      ],
+      "engines": [
+        {
+          "engine": "wrong_model",
+          "features": {},
+          "host": "h-wrong_model",
+          "kind": "tensorfold",
+          "load": "idle",
+          "model": "Other",
+          "note_count": 0,
+          "problem_count": 1,
+          "requests": 1,
+          "sanity_latency_is_null": true,
+          "sanity_result": "n/a",
+          "status": "wrong",
+          "url": "http://127.0.0.1:{port}",
+          "verdict": "wrong",
+          "version": "1.2.3"
+        }
+      ],
+      "env_reg": false,
+      "exit_code": 1,
+      "json_exit_code": 1,
+      "label": "engine wrong_model, full mode",
+      "mode": "full",
+      "python_stderr_head": null,
+      "stderr_empty": true,
+      "stdout_empty": false,
+      "style": "json"
+    }
+  ],
+  "scenario": "wrong_model"
+}

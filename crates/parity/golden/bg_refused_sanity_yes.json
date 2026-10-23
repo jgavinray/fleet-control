@@ -1,0 +1,111 @@
+{
+  "runs": [
+    {
+      "args": [
+        "--quick",
+        "--json",
+        "--registry",
+        "{registry}",
+        "bg_refused_sanity_yes"
+      ],
+      "cwd": null,
+      "engine_order": [
+        "bg_refused_sanity_yes"
+      ],
+      "engines": [
+        {
+          "engine": "bg_refused_sanity_yes",
+          "features": {},
+          "host": "h-bg_refused_sanity_yes",
+          "kind": "tensorfold",
+          "load": "idle",
+          "model": "M-1",
+          "note_count": 0,
+          "problem_count": 0,
+          "requests": 3,
+          "sanity_latency_is_null": false,
+          "sanity_result": "pass",
+          "status": "ok",
+          "url": "http://127.0.0.1:{port}",
+          "verdict": "ok",
+          "version": "1.2.3"
+        }
+      ],
+      "env_reg": false,
+      "exit_code": 0,
+      "json_exit_code": 0,
+      "label": "engine bg_refused_sanity_yes",
+      "mode": "quick",
+      "python_stderr_head": null,
+      "stderr_empty": true,
+      "stdout_empty": false,
+      "style": "json"
+    },
+    {
+      "args": [
+        "--json",
+        "--registry",
+        "{registry}",
+        "bg_refused_sanity_yes"
+      ],
+      "cwd": null,
+      "engine_order": [
+        "bg_refused_sanity_yes"
+      ],
+      "engines": [
+        {
+          "engine": "bg_refused_sanity_yes",
+          "features": {
+            "background_priority": {
+              "drift": true,
+              "expected": "yes",
+              "reason": "HTTP 400: priority not supported",
+              "result": "no"
+            },
+            "guided_choice": {
+              "drift": false,
+              "expected": null,
+              "reason": "answered 'apple'",
+              "result": "yes"
+            },
+            "logprobs": {
+              "drift": false,
+              "expected": null,
+              "reason": "logprobs returned",
+              "result": "yes"
+            },
+            "prompt_logprobs": {
+              "drift": false,
+              "expected": null,
+              "reason": "prompt_logprobs returned",
+              "result": "yes"
+            }
+          },
+          "host": "h-bg_refused_sanity_yes",
+          "kind": "tensorfold",
+          "load": "idle",
+          "model": "M-1",
+          "note_count": 0,
+          "problem_count": 0,
+          "requests": 6,
+          "sanity_latency_is_null": false,
+          "sanity_result": "pass",
+          "status": "ok",
+          "url": "http://127.0.0.1:{port}",
+          "verdict": "drift",
+          "version": "1.2.3"
+        }
+      ],
+      "env_reg": false,
+      "exit_code": 2,
+      "json_exit_code": 2,
+      "label": "engine bg_refused_sanity_yes, full mode",
+      "mode": "full",
+      "python_stderr_head": null,
+      "stderr_empty": true,
+      "stdout_empty": false,
+      "style": "json"
+    }
+  ],
+  "scenario": "bg_refused_sanity_yes"
+}

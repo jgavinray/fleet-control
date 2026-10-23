@@ -1,0 +1,86 @@
+{
+  "runs": [
+    {
+      "args": [
+        "--quick",
+        "--json",
+        "--registry",
+        "{registry}",
+        "laya_health_bad"
+      ],
+      "cwd": null,
+      "engine_order": [
+        "laya_health_bad"
+      ],
+      "engines": [
+        {
+          "engine": "laya_health_bad",
+          "features": {},
+          "host": "h-laya_health_bad",
+          "kind": "laya",
+          "load": "",
+          "model": "",
+          "note_count": 0,
+          "problem_count": 1,
+          "requests": 1,
+          "sanity_latency_is_null": true,
+          "sanity_result": "n/a",
+          "status": "down",
+          "url": "http://127.0.0.1:{port}",
+          "verdict": "down",
+          "version": ""
+        }
+      ],
+      "env_reg": false,
+      "exit_code": 1,
+      "json_exit_code": 1,
+      "label": "engine laya_health_bad",
+      "mode": "quick",
+      "python_stderr_head": null,
+      "stderr_empty": true,
+      "stdout_empty": false,
+      "style": "json"
+    },
+    {
+      "args": [
+        "--json",
+        "--registry",
+        "{registry}",
+        "laya_health_bad"
+      ],
+      "cwd": null,
+      "engine_order": [
+        "laya_health_bad"
+      ],
+      "engines": [
+        {
+          "engine": "laya_health_bad",
+          "features": {},
+          "host": "h-laya_health_bad",
+          "kind": "laya",
+          "load": "",
+          "model": "",
+          "note_count": 0,
+          "problem_count": 1,
+          "requests": 1,
+          "sanity_latency_is_null": true,
+          "sanity_result": "n/a",
+          "status": "down",
+          "url": "http://127.0.0.1:{port}",
+          "verdict": "down",
+          "version": ""
+        }
+      ],
+      "env_reg": false,
+      "exit_code": 1,
+      "json_exit_code": 1,
+      "label": "engine laya_health_bad, full mode",
+      "mode": "full",
+      "python_stderr_head": null,
+      "stderr_empty": true,
+      "stdout_empty": false,
+      "style": "json"
+    }
+  ],
+  "scenario": "laya_health_bad"
+}

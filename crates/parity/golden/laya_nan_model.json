@@ -1,0 +1,86 @@
+{
+  "runs": [
+    {
+      "args": [
+        "--quick",
+        "--json",
+        "--registry",
+        "{registry}",
+        "laya_nan_model"
+      ],
+      "cwd": null,
+      "engine_order": [
+        "laya_nan_model"
+      ],
+      "engines": [
+        {
+          "engine": "laya_nan_model",
+          "features": {},
+          "host": "h-laya_nan_model",
+          "kind": "laya",
+          "load": "",
+          "model": "nan",
+          "note_count": 1,
+          "problem_count": 1,
+          "requests": 2,
+          "sanity_latency_is_null": false,
+          "sanity_result": "pass",
+          "status": "wrong",
+          "url": "http://127.0.0.1:{port}",
+          "verdict": "wrong",
+          "version": ""
+        }
+      ],
+      "env_reg": false,
+      "exit_code": 1,
+      "json_exit_code": 1,
+      "label": "engine laya_nan_model",
+      "mode": "quick",
+      "python_stderr_head": null,
+      "stderr_empty": true,
+      "stdout_empty": false,
+      "style": "json"
+    },
+    {
+      "args": [
+        "--json",
+        "--registry",
+        "{registry}",
+        "laya_nan_model"
+      ],
+      "cwd": null,
+      "engine_order": [
+        "laya_nan_model"
+      ],
+      "engines": [
+        {
+          "engine": "laya_nan_model",
+          "features": {},
+          "host": "h-laya_nan_model",
+          "kind": "laya",
+          "load": "",
+          "model": "nan",
+          "note_count": 1,
+          "problem_count": 1,
+          "requests": 2,
+          "sanity_latency_is_null": false,
+          "sanity_result": "pass",
+          "status": "wrong",
+          "url": "http://127.0.0.1:{port}",
+          "verdict": "wrong",
+          "version": ""
+        }
+      ],
+      "env_reg": false,
+      "exit_code": 1,
+      "json_exit_code": 1,
+      "label": "engine laya_nan_model, full mode",
+      "mode": "full",
+      "python_stderr_head": null,
+      "stderr_empty": true,
+      "stdout_empty": false,
+      "style": "json"
+    }
+  ],
+  "scenario": "laya_nan_model"
+}

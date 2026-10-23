@@ -1,0 +1,86 @@
+{
+  "runs": [
+    {
+      "args": [
+        "--quick",
+        "--json",
+        "--registry",
+        "{registry}",
+        "sanity_null"
+      ],
+      "cwd": null,
+      "engine_order": [
+        "sanity_null"
+      ],
+      "engines": [
+        {
+          "engine": "sanity_null",
+          "features": {},
+          "host": "h-sanity_null",
+          "kind": "tensorfold",
+          "load": "idle",
+          "model": "M-1",
+          "note_count": 0,
+          "problem_count": 1,
+          "requests": 2,
+          "sanity_latency_is_null": false,
+          "sanity_result": "fail",
+          "status": "wrong",
+          "url": "http://127.0.0.1:{port}",
+          "verdict": "wrong",
+          "version": "1.2.3"
+        }
+      ],
+      "env_reg": false,
+      "exit_code": 1,
+      "json_exit_code": 1,
+      "label": "engine sanity_null",
+      "mode": "quick",
+      "python_stderr_head": null,
+      "stderr_empty": true,
+      "stdout_empty": false,
+      "style": "json"
+    },
+    {
+      "args": [
+        "--json",
+        "--registry",
+        "{registry}",
+        "sanity_null"
+      ],
+      "cwd": null,
+      "engine_order": [
+        "sanity_null"
+      ],
+      "engines": [
+        {
+          "engine": "sanity_null",
+          "features": {},
+          "host": "h-sanity_null",
+          "kind": "tensorfold",
+          "load": "idle",
+          "model": "M-1",
+          "note_count": 0,
+          "problem_count": 1,
+          "requests": 2,
+          "sanity_latency_is_null": false,
+          "sanity_result": "fail",
+          "status": "wrong",
+          "url": "http://127.0.0.1:{port}",
+          "verdict": "wrong",
+          "version": "1.2.3"
+        }
+      ],
+      "env_reg": false,
+      "exit_code": 1,
+      "json_exit_code": 1,
+      "label": "engine sanity_null, full mode",
+      "mode": "full",
+      "python_stderr_head": null,
+      "stderr_empty": true,
+      "stdout_empty": false,
+      "style": "json"
+    }
+  ],
+  "scenario": "sanity_null"
+}

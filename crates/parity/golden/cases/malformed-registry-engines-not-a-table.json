@@ -1,0 +1,22 @@
+{
+  "runs": [
+    {
+      "args": [
+        "--quick",
+        "--json",
+        "--registry",
+        "{registry_dir}/bad-engines-not-a-table.toml"
+      ],
+      "cwd": null,
+      "env_reg": false,
+      "exit_code": 1,
+      "label": "malformed registry: engines not a table",
+      "mode": "quick",
+      "python_stderr_head": "Traceback (most recent call last):\n  File \"/Users/jgavinray/dev/fleet-control/check/fleet_check.py\", line 760, in <module>\n    sys.exit(main())\n             ~~~~^^\n  File \"/Users/jgavinray/dev/fleet-c",
+      "stderr_empty": false,
+      "stdout_empty": true,
+      "style": "usage"
+    }
+  ],
+  "scenario": "malformed registry: engines not a table"
+}
