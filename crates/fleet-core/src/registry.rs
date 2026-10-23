@@ -525,27 +525,51 @@ pub fn registry_path(explicit: Option<&Path>) -> PathBuf {
 /// Python's `DEFAULT_REGISTRY` is `<repo root>/fleet.toml`, found relative to
 /// the script's `os.path.realpath`, so invoking `~/.local/bin/fleet-check` (a
 /// symlink into the checkout) still finds the repo. Mirror that: resolve the
-/// executable's symlink chain before walking up, then fall back to the working
-/// directory.
+/// executable's symlink chain before walking up, then fall back to the
+/// industry-standard config home (`~/.config/fleet-control/fleet.toml`, the
+/// same directory as the local LAN override), then to the working directory.
+/// The config home is a Rust-only step; Python always searches from its
+/// script, so a packaged binary there would need `$FLEET_REGISTRY`.
 pub fn default_registry_path() -> PathBuf {
     let exe_dir = std::env::current_exe().ok().and_then(|exe| {
         let resolved = exe.canonicalize().unwrap_or(exe);
         resolved.parent().map(Path::to_path_buf)
     });
-    let starts = exe_dir.into_iter().chain(std::env::current_dir().ok());
-    search_registry(starts)
+    resolve_registry_path(exe_dir, &home_dir(), std::env::current_dir().ok())
 }
 
-fn search_registry(starts: impl Iterator<Item = PathBuf>) -> PathBuf {
+/// The registry's config home: `~/.config/fleet-control/fleet.toml`. Plain
+/// `~/.config` (no `$XDG_CONFIG_HOME` indirection), matching `local_path()`.
+pub fn config_registry_path(home: &Path) -> PathBuf {
+    home.join(".config")
+        .join("fleet-control")
+        .join(REGISTRY_FILE)
+}
+
+fn resolve_registry_path(exe_dir: Option<PathBuf>, home: &Path, cwd: Option<PathBuf>) -> PathBuf {
+    if let Some(found) = search_registry(exe_dir.into_iter()) {
+        return found;
+    }
+    let config = config_registry_path(home);
+    if config.is_file() {
+        return config;
+    }
+    if let Some(found) = search_registry(cwd.into_iter()) {
+        return found;
+    }
+    PathBuf::from(REGISTRY_FILE)
+}
+
+fn search_registry(starts: impl Iterator<Item = PathBuf>) -> Option<PathBuf> {
     for start in starts {
         for dir in start.ancestors() {
             let candidate = dir.join(REGISTRY_FILE);
             if candidate.is_file() {
-                return candidate;
+                return Some(candidate);
             }
         }
     }
-    PathBuf::from(REGISTRY_FILE)
+    None
 }
 
 #[cfg(test)]
@@ -577,14 +601,58 @@ mod tests {
         let link = tmp.join("launcher");
         std::os::unix::fs::symlink(&real, &link).unwrap();
         // Without canonicalizing (the old behavior) no fleet.toml sits above
-        // the link, so the search falls back to the bare relative name.
-        let raw = search_registry([link.clone()].into_iter());
-        assert_eq!(raw, PathBuf::from(REGISTRY_FILE));
-        // Canonicalized first — what default_registry_path now does — it is found.
+        // the link, so the search finds nothing at all.
+        assert_eq!(search_registry([link.clone()].into_iter()), None);
+        // Canonicalized first — what default_registry_path does — it is found.
         let found = search_registry([link.canonicalize().unwrap()].into_iter());
         assert_eq!(
             found,
-            tmp.canonicalize().unwrap().join("checkout/fleet.toml")
+            Some(tmp.canonicalize().unwrap().join("checkout/fleet.toml"))
+        );
+        std::fs::remove_dir_all(&tmp).unwrap();
+    }
+
+    #[test]
+    fn config_home_is_the_default_when_nothing_sits_above_the_binary() {
+        let tmp = std::env::temp_dir().join(format!("fleet-core-config-{}", std::process::id()));
+        let bin = tmp.join("opt/tools/bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let config = tmp.join("home/.config/fleet-control");
+        std::fs::create_dir_all(&config).unwrap();
+        std::fs::write(config.join("fleet.toml"), "[hosts]\n").unwrap();
+        let home = tmp.join("home");
+        // No registry above the binary dir and none in the cwd: the config
+        // home answers.
+        let cwd = tmp.join("somewhere-else");
+        std::fs::create_dir_all(&cwd).unwrap();
+        assert_eq!(
+            resolve_registry_path(Some(bin.clone()), &home, Some(cwd)),
+            config.join("fleet.toml")
+        );
+        // A checkout above the binary still wins over the config home.
+        std::fs::write(tmp.join("opt/fleet.toml"), "[hosts]\n").unwrap();
+        assert_eq!(
+            resolve_registry_path(Some(bin), &home, None),
+            tmp.join("opt/fleet.toml")
+        );
+        std::fs::remove_dir_all(&tmp).unwrap();
+    }
+
+    #[test]
+    fn without_a_config_home_the_cwd_walk_and_bare_fallback_remain() {
+        let tmp = std::env::temp_dir().join(format!("fleet-core-cwd-{}", std::process::id()));
+        let cwd = tmp.join("work/sub");
+        std::fs::create_dir_all(&cwd).unwrap();
+        std::fs::write(tmp.join("work/fleet.toml"), "[hosts]\n").unwrap();
+        let empty_home = tmp.join("home");
+        std::fs::create_dir_all(&empty_home).unwrap();
+        assert_eq!(
+            resolve_registry_path(None, &empty_home, Some(cwd)),
+            tmp.join("work/fleet.toml")
+        );
+        assert_eq!(
+            resolve_registry_path(None, &empty_home, None),
+            PathBuf::from(REGISTRY_FILE)
         );
         std::fs::remove_dir_all(&tmp).unwrap();
     }
