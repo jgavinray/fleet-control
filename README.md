@@ -233,28 +233,26 @@ bash crates/gate.sh
 
 The gate builds in release mode, requires at least 8 tests per crate, runs
 `cargo clippy --all-targets -- -D warnings` and `cargo fmt --check`, then runs
-`crates/parity.py`: a 127-comparison mock-engine harness that runs the Python
+`crates/parity.py`: a 154-comparison mock-engine harness that runs the Python
 and Rust tools side by side on loopback and compares exit codes, engine order
 and the comparable JSON fields (any stderr on a normal run fails). No live
 engine is contacted.
 
 **Parity.** The Rust tool matches the Python on every scenario in
 `crates/parity.py`. Message wording may differ; counts, fields and exit codes
-do not.
+do not. Replies containing `NaN`, `Infinity` or `-Infinity` tokens parse
+exactly as Python's `json.loads` accepts them, and request bodies identify as
+Python-urllib/3.14.
 
 **Known divergences from the Python tool.**
 
-- JSON bodies containing `NaN` or `Infinity` are accepted by Python's
-  `json.loads` but rejected by `serde_json`: the Rust tool treats such a
-  reply as unparseable.
 - A timeout applies to the whole request in the Rust tool (ureq's global
   deadline) rather than to each socket operation as in Python: a response
   that trickles in indefinitely in small chunks times out in Rust where
   Python would succeed.
 - Error-message and note text may differ in wording; the gate compares
   problem and note counts, not text.
-- Request bodies are serialized with sorted keys, and the tool identifies
-  itself with ureq's default `User-Agent`, not Python-urllib's.
+- Request bodies are serialized with sorted keys.
 - Where the Python would crash on a malformed reply or registry (uncaught
   `TypeError`, `KeyError`, `AttributeError` or `ValueError`), the Rust tool
   reports the failure through its normal statuses and exit code 1 instead of
