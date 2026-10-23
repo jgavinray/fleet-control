@@ -51,45 +51,74 @@ fn default_state_dir() -> PathBuf {
 
 // ------------------------------------------------------------------ time
 
-/// Local wall-clock time as `YYYY-MM-DDTHH:MM:SS±HH:MM` (what Python's
-/// `datetime.now().astimezone().isoformat(timespec="seconds")` writes), plus
-/// the local hour and minute that `hhmm` formats.
-///
-/// `/bin/date` supplies the local offset (Python read it from the OS);
-/// `LC_ALL=C` pins the AM/PM-free numeric fields. If date is unavailable the
-/// fallback is UTC with a zero offset — `run` must work anywhere.
-fn now_local() -> (String, u32, u32) {
-    if let Ok(out) = Command::new("/bin/date")
-        .arg("+%Y-%m-%dT%H:%M:%S%z")
-        .env("LC_ALL", "C")
-        .output()
-    {
-        if out.status.success() {
-            let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
-            // "2026-10-22T19:23:05-0700" — insert the ISO colon in the offset.
-            if s.len() >= 25 {
-                let (main, off) = s.split_at(s.len() - 5);
-                let off = if off.contains(':') {
-                    off.to_string()
-                } else {
-                    format!("{}:{}", &off[..3], &off[3..])
-                };
-                let hour: u32 = s[11..13].parse().unwrap_or(0);
-                let minute: u32 = s[14..16].parse().unwrap_or(0);
-                return (format!("{main}{off}"), hour, minute);
-            }
-        }
+/// Local offset east of UTC in seconds, from `/bin/date +%z` — the same
+/// zone (TZ environment included) that Python's `datetime.now().astimezone()`
+/// read. `tz` overrides the zone for this call only (tests pin it on the
+/// child, so the machine's own zone never leaks into an assertion).
+fn date_offset_secs(tz: Option<&str>) -> Option<i64> {
+    let mut cmd = Command::new("/bin/date");
+    cmd.arg("+%z").env("LC_ALL", "C");
+    if let Some(tz) = tz {
+        cmd.env("TZ", tz);
     }
+    let out = cmd.output().ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    parse_offset(String::from_utf8_lossy(&out.stdout).trim())
+}
+
+/// Parses `date +%z` output: `±HHMM` (also the GNU `%:z` form, `±HH:MM`).
+fn parse_offset(s: &str) -> Option<i64> {
+    let (sign, digits) = match s.as_bytes().first()? {
+        b'+' => (1i64, &s[1..]),
+        b'-' => (-1i64, &s[1..]),
+        _ => return None,
+    };
+    let (hh, mm) = match digits.as_bytes().get(2)? {
+        b':' => (
+            digits[..2].parse::<i64>().ok()?,
+            digits[3..5].parse::<i64>().ok()?,
+        ),
+        _ => (
+            digits[..2].parse::<i64>().ok()?,
+            digits[2..4].parse::<i64>().ok()?,
+        ),
+    };
+    if hh > 23 || mm > 59 {
+        return None;
+    }
+    Some(sign * (hh * 3600 + mm * 60))
+}
+
+/// Formats epoch seconds `secs` as `YYYY-MM-DDTHH:MM:SS±HH:MM` at a fixed
+/// `offset` — the wall-clock string Python wrote via
+/// `datetime.now().astimezone().isoformat(timespec="seconds")`.
+fn format_ts(secs: i64, offset: i64) -> String {
+    let (y, mo, d, h, mi, ss) = civil_from_epochs(secs + offset);
+    let (sign, abs) = if offset < 0 {
+        ('-', -offset)
+    } else {
+        ('+', offset)
+    };
+    format!(
+        "{y:04}-{mo:02}-{d:02}T{h:02}:{mi:02}:{ss:02}{sign}{:02}:{:02}",
+        abs / 3600,
+        (abs % 3600) / 60
+    )
+}
+
+/// Local wall-clock time plus the local hour and minute that `hhmm`
+/// formats. The offset comes from one `/bin/date +%z` call taken at tick
+/// start; if date is unavailable it falls back to `+00:00` — `run` must
+/// work anywhere.
+fn now_local(offset: i64) -> (String, u32, u32) {
     let secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0);
-    let (y, mo, d, h, mi, ss) = civil_from_epochs(secs);
-    (
-        format!("{y:04}-{mo:02}-{d:02}T{h:02}:{mi:02}:{ss:02}+00:00"),
-        h,
-        mi,
-    )
+    let (_y, _mo, _d, h, mi, _ss) = civil_from_epochs(secs + offset);
+    (format_ts(secs, offset), h, mi)
 }
 
 /// Days-from-civil (Hinnant) inverse, used only when /bin/date is missing.
@@ -457,7 +486,11 @@ fn tick() -> i32 {
         .filter(|s| !s.is_empty());
     let check_cmd = env::var("FLEET_STOPGAP_CHECK").unwrap_or_else(|_| default_check());
 
-    let (ts, hour, minute) = now_local();
+    // One `date +%z` per tick, taken up front like the check command; it
+    // respects TZ and the machine zone exactly like astimezone(). UTC
+    // (+00:00) only if date itself is unavailable.
+    let tz_offset = date_offset_secs(None).unwrap_or(0);
+    let (ts, hour, minute) = now_local(tz_offset);
     let mut state = load_state(&state_path);
     let (data, code, err) = run_fleet_check(&check_cmd);
 
@@ -1016,5 +1049,58 @@ mod tests {
         assert!(xml.contains(&format!("<string>{LABEL}</string>")));
         assert!(xml.contains("<key>StartInterval</key>\n  <integer>120</integer>"));
         assert!(xml.ends_with("</dict>\n</plist>\n"));
+    }
+
+    #[test]
+    fn parse_offset_accepts_the_date_forms() {
+        assert_eq!(parse_offset("+0800"), Some(8 * 3600));
+        assert_eq!(parse_offset("-0700"), Some(-7 * 3600));
+        assert_eq!(parse_offset("+0530"), Some(5 * 3600 + 30 * 60));
+        assert_eq!(parse_offset("+08:00"), Some(8 * 3600)); // GNU %:z form
+        assert_eq!(parse_offset("0800"), None); // sign is mandatory
+        assert_eq!(parse_offset("+2400"), None);
+        assert_eq!(parse_offset("+0560"), None);
+        assert_eq!(parse_offset(""), None);
+    }
+
+    #[test]
+    fn format_ts_pins_epoch_and_offset() {
+        // 1792733383 = 2026-10-23T05:29:43Z; at -0700 the wall clock reads
+        // 2026-10-22T22:29:43, exactly what astimezone().isoformat wrote.
+        assert_eq!(
+            format_ts(1_792_733_383, -7 * 3600),
+            "2026-10-22T22:29:43-07:00"
+        );
+        assert_eq!(format_ts(1_792_733_383, 0), "2026-10-23T05:29:43+00:00");
+        assert_eq!(
+            format_ts(1_792_733_383, 8 * 3600),
+            "2026-10-23T13:29:43+08:00"
+        );
+    }
+
+    #[test]
+    fn date_offset_follows_the_tz_environment() {
+        // TZ is pinned on the child process, so the machine's own zone can
+        // never leak into the assertion.
+        assert_eq!(date_offset_secs(Some("UTC")), Some(0));
+        let la = date_offset_secs(Some("America/Los_Angeles"));
+        // Same zone date(1) resolves for the current instant: -0700 under
+        // daylight saving, -0800 in winter; /bin/date decides which today.
+        assert!(la == Some(-7 * 3600) || la == Some(-8 * 3600), "got {la:?}");
+        // And the rendered stamp carries that same offset.
+        let (ts, _, _) = now_local(la.unwrap_or(0));
+        let want = match la {
+            Some(-25_200) => "-07:00",
+            _ => "-08:00",
+        };
+        assert!(ts.ends_with(want), "{ts}");
+    }
+
+    #[test]
+    fn now_local_falls_back_to_utc_only_via_the_offset_argument() {
+        let (ts, hour, minute) = now_local(0);
+        assert_eq!(ts.len(), 25, "{ts}");
+        assert!(ts.ends_with("+00:00"), "{ts}");
+        assert!(hour < 24 && minute < 60);
     }
 }

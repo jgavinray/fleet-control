@@ -298,6 +298,42 @@ fn history_has_one_line_per_run_with_results() {
 }
 
 #[test]
+fn history_ts_honours_the_tz_environment() {
+    // The README's jq recipes string-compare Python and Rust stamps, so the
+    // tick must write local wall time with the same ±HH:MM offset that
+    // datetime.now().astimezone() produced — driven by TZ, like Python's.
+    let h = Harness::new(&[OK]);
+    let mut cmd = h.env_cmd(&["run"]);
+    cmd.env("TZ", "America/Los_Angeles");
+    assert!(cmd.output().unwrap().status.success());
+    let ts = h.history()[0]["ts"].as_str().unwrap().to_string();
+    // The tick consulted /bin/date +%z under this TZ; demand the same answer.
+    let z = String::from_utf8_lossy(
+        &Command::new("/bin/date")
+            .arg("+%z")
+            .env("TZ", "America/Los_Angeles")
+            .env("LC_ALL", "C")
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .trim()
+    .to_string();
+    let expect = match z.as_str() {
+        "-0700" => "-07:00",
+        "-0800" => "-08:00",
+        other => panic!("unexpected date output {other:?}"),
+    };
+    assert!(ts.ends_with(expect), "{ts} must end with {expect}");
+    // UTC pins the zero form, independent of the machine's zone.
+    let utc = Harness::new(&[OK]);
+    let mut cmd = utc.env_cmd(&["run"]);
+    cmd.env("TZ", "UTC");
+    assert!(cmd.output().unwrap().status.success());
+    let ts = utc.history()[0]["ts"].as_str().unwrap().to_string();
+    assert!(ts.ends_with("+00:00"), "{ts} must be UTC-tagged");
+}
+#[test]
 fn runs_fleet_check_quick_and_json() {
     let h = go(&[OK]);
     assert_eq!(
