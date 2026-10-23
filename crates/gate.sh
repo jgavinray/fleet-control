@@ -49,14 +49,14 @@ for cand in "$ROOT/target/release/fleet-check-rs" "$ROOT/$BINCRATE/target/releas
 done
 [ -n "$BIN" ] || { echo "GATE FAIL: no binary at target/release/fleet-check-rs (build failed or the bin is not named fleet-check-rs)" >&2; exit 1; }
 
-for p in fleet-core fleet-check-rs fleet-mcp; do
+for p in fleet-core fleet-check-rs fleet-mcp fleet-stopgap; do
   t=$(cargo test -p "$p" 2>&1); st=$?
   echo "$t" | grep -E "^test result|error" | head -8
   [ "$st" -eq 0 ] || bad "cargo test -p $p failed"
   passed=$(echo "$t" | awk '/^test result:/ {p += $4} END {print p + 0}')
   [ "$passed" -ge 8 ] || bad "only $passed tests in $p; at least 8 are required"
 done
-( cd "$ROOT" && cargo clippy -p fleet-core -p fleet-check-rs -p fleet-mcp --all-targets --quiet -- -D warnings 2>&1 | tail -20; exit "${PIPESTATUS[0]}" ) || bad "clippy -D warnings failed"
+( cd "$ROOT" && cargo clippy -p fleet-core -p fleet-check-rs -p fleet-mcp -p fleet-stopgap -p parity --all-targets --quiet -- -D warnings 2>&1 | tail -20; exit "${PIPESTATUS[0]}" ) || bad "clippy -D warnings failed"
 ( cd "$ROOT" && cargo fmt --check >/dev/null 2>&1 ) || bad "cargo fmt --check failed"
 
 ( cd "$ROOT" && cargo build --release -p parity --quiet 2>&1 | tail -20; exit "${PIPESTATUS[0]}" ) || bad "cargo build -p parity failed"
