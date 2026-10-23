@@ -1,4 +1,4 @@
-//! Parity tests for the pieces `check/fleet_check.py` defines: registry
+//! Parity tests for the pieces `the original Python fleet-check` defines: registry
 //! loading (including the real `fleet.toml`), the local LAN override, health
 //! and load helpers, the sanity answer rule, the result record, and the
 //! counting client.

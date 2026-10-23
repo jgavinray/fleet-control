@@ -1,4 +1,4 @@
-//! Library face of `fleet-check-rs`, the Rust port of `check/fleet_check.py`.
+//! Library face of `fleet-check-rs`, the Rust port of `the original Python fleet-check`.
 //!
 //! Parse the command line, load the registry (with the local LAN override),
 //! check every selected engine, and write either the table or the JSON

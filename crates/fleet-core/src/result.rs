@@ -1,5 +1,5 @@
 //! The per-engine result record, mirroring `Result` in
-//! `check/fleet_check.py`: worst-wins failures, drift detection, verdict and
+//! `the original Python fleet-check`: worst-wins failures, drift detection, verdict and
 //! the exact JSON shape the gate compares.
 
 use std::collections::BTreeMap;

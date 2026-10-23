@@ -1,5 +1,5 @@
 //! The table output, a 1:1 port of `render_table` and `feature_cell` in
-//! `check/fleet_check.py`: same headers, same status text, same column widths
+//! `the original Python fleet-check`: same headers, same status text, same column widths
 //! (widest cell, two-space join, right-trimmed lines), same detail-line order,
 //! and the same summary line.
 

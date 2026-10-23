@@ -1,5 +1,5 @@
 //! The TensorFold engine check, ported 1:1 from `check_tensorfold` in
-//! `check/fleet_check.py`.
+//! `the original Python fleet-check`.
 //!
 //! Order matters and is the Python order: health (up, not warming), load and
 //! version, model ids (health `model_ids`, else `/v1/models` `data[].id`), the

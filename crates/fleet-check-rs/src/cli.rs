@@ -1,4 +1,4 @@
-//! Command-line parsing, compatible with what `check/fleet_check.py` accepts.
+//! Command-line parsing, compatible with what `the original Python fleet-check` accepts.
 //!
 //! argparse semantics that matter here: `--opt value` and `--opt=value` both
 //! work, long options may be abbreviated to a unique prefix, `-h`/`--help`

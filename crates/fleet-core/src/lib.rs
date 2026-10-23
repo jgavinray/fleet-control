@@ -1,4 +1,4 @@
-//! Shared library for `fleet-check-rs`, the Rust port of `check/fleet_check.py`.
+//! Shared library for `fleet-check-rs`, the Rust port of `the original Python fleet-check`.
 //!
 //! The Python tool is the specification. This crate holds the pieces every
 //! engine check needs: the registry loader, the counting HTTP client, the result

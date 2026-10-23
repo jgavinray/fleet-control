@@ -1,5 +1,5 @@
 //! The counting HTTP client, mirroring `Resp` and `Client` in
-//! `check/fleet_check.py`.
+//! `the original Python fleet-check`.
 //!
 //! Every request carries `Accept: application/json`; a request that sends a
 //! body also carries `Content-Type: application/json`. Non-2xx answers are

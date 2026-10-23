@@ -71,6 +71,16 @@ for t in "$ROOT/target" "$ROOT/$BINCRATE/target" "$ROOT/$CORE/target"; do
   git check-ignore -q "$t" || bad "$t is not git-ignored (add target to the root .gitignore)"
 done
 
+# No IP addresses anywhere in the repo (the fleet.toml rule: the repo is
+# public and hosts are Tailscale FQDNs). Loopback and the RFC 5737
+# documentation range are the only exceptions (mock fixtures and tests).
+ip_hits=$({ git ls-files; git ls-files --others --exclude-standard; } | sort -u |
+  while read -r f; do
+    [ -f "$f" ] || continue
+    grep -nH -E '\b([0-9]{1,3}\.){3}[0-9]{1,3}\b' -I "$f" 2>/dev/null
+  done | grep -v -E '127\.0\.0\.1|192\.0\.2\.')
+[ -z "$ip_hits" ] || { echo "$ip_hits" | head -5 >&2; bad "non-loopback IP address committed"; }
+
 # Diff against the branch point on local main. origin/main can lag main, and
 # an origin/main-first base would flag already-merged main work (the workspace
 # Cargo.toml/Cargo.lock) as out-of-scope changes of the branch under test.

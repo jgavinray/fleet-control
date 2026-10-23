@@ -1,4 +1,4 @@
-//! `fleet-check-rs`: the Rust port of `check/fleet_check.py`. The logic lives
+//! `fleet-check-rs`: the Rust port of `the original Python fleet-check`. The logic lives
 //! in the library crate ([`fleet_check_rs::run`]); this binary only wires the
 //! process streams to it.
 

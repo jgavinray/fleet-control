@@ -53,7 +53,7 @@ the rule links to, not in the prompt.
 | Never read `~/.bashrc` on hyper01 | `~/exomemory/tasks/done/laya-fix.md` (it holds Hugging Face tokens) |
 | Stop services via their supervisor, pause the watchdog | `feedback/find-supervisors-before-stopping.md`; `wiki/llm-watchdog.md` |
 | No large image builds or copies while a model is loaded | `~/exomemory/signoff.md` (fleet facts, GLM entry) |
-| Secrets: never print, mask, never commit | `~/.claude/CLAUDE.md`; masking helper is `fleetlib.redact` in `lib/` |
+| Secrets: never print, mask, never commit | `~/.claude/CLAUDE.md`; masking helper is `fleet-stopgap redact` |
 | `priority: "background"`, `guided_choice` needs thinking off, DeepSeek rejects `guided_choice` | `wiki/glm53-tensorfold-upgrade.md`; `wiki/local-jev-research.md`; `signoff.md` fleet facts |
 | Plain words, short replies | `feedback/plain-words-with-context.md`; `feedback/user-wants-action.md` |
 | How-to doc for every operational change | `feedback/sonnet-high-for-agents.md` ("Reinforced" note) |
@@ -61,8 +61,7 @@ the rule links to, not in the prompt.
 | Memory is only exomemory | `~/exomemory/CLAUDE.md`; `~/.claude/CLAUDE.md` (Memory) |
 | Sonnet at high effort | `feedback/sonnet-high-for-agents.md` |
 
-`fleet.toml` and `lib/` (`fleetlib.redact`) are written by other
-workers. The agent only points at them.
+`fleet.toml` is written by other workers. The agent only points at it.
 
 ## What is not checked yet
 

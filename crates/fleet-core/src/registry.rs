@@ -2,7 +2,7 @@
 //! the untracked local LAN override (`$FLEET_LOCAL` or
 //! `~/.config/fleet-control/local.toml`).
 //!
-//! The semantics are `check/fleet_check.py`'s: only the keys the checks use are
+//! The semantics are `the original Python fleet-check`'s: only the keys the checks use are
 //! kept (`url`, `model`, `kind`, `host`, `health_path`, `exporter_url`,
 //! `shared`, `expected_features`); everything else in the file is ignored. The
 //! URL in the report is the registry string after the local rewrite, exactly as

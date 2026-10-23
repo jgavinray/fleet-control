@@ -8,7 +8,8 @@
 #   - No secrets. Base URLs only.
 #   - Hosts and URLs use Tailscale fully qualified domain names (FQDNs). No IP
 #     address of any kind goes in this file or anywhere else in the repo
-#     (check/test.sh fails if one does). The repo is public.
+#     (crates/gate.sh carries the no-IP check; loopback and the RFC 5737
+#     documentation range are the only exceptions). The repo is public.
 #   - To connect over the home LAN instead (the owner's standing rule, because
 #     Tailscale SSH muddied a forensics trace), put a host-to-address map in
 #     the untracked local file ~/.config/fleet-control/local.toml (or the file

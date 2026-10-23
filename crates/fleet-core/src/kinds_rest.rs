@@ -1,6 +1,6 @@
 //! The REST-only engine kinds: laya, lfm2d and jev-glm. Ports of `check_laya`,
 //! `check_lfm2d`, `check_jev_glm` and the shared `_check_systemone` from
-//! `check/fleet_check.py`.
+//! `the original Python fleet-check`.
 //!
 //! TensorFold's feature probes live in `probes`; this module only speaks HTTP.
 

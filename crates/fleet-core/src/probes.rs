@@ -1,4 +1,4 @@
-//! TensorFold feature probes, ported 1:1 from `check/fleet_check.py`.
+//! TensorFold feature probes, ported 1:1 from `the original Python fleet-check`.
 //!
 //! Every probe answers `(result, reason)` with result "yes" | "no" | "error".
 //! `classify_refusal` turns a non-200 answer into that pair: a 4xx (or 501)
