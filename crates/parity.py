@@ -17,6 +17,7 @@ starvation retries are exercised; every request is answered at once.
 usage: parity.py PYTHON_TOOL RUST_BIN
 """
 import json
+import math
 import os
 import socket
 import subprocess
@@ -185,6 +186,49 @@ def scen():
     s["read_empty"] = dict(engine={"kind": "lfm2d", "read": ""}, models=(200, [{"id": MODEL}]),
                            spans=(200, [[{"text": "sk-1", "start": 0, "end": 5}]]))
     s["health_path_empty"] = dict(engine={"health_path": ""}, root=(200, healthy), chat=lambda b: (200, OK_CHAT))
+
+    # --- non-finite tokens (3d3e804): Python's json.loads accepts bare NaN,
+    # Infinity and -Infinity, so a reply carrying one must stay readable. The
+    # mock bodies are json.dumps output, which writes those tokens bare.
+    # A non-finite counter is a truthy float in Python: the load line renders
+    # it and a shared engine is skipped as busy.
+    s["nonfinite_running"] = dict(health=(200, dict(healthy, requests_running=float("nan"))), chat=ideal_chat)
+    s["nonfinite_running_shared"] = dict(engine={"shared": True},
+                                         health=(200, dict(healthy, requests_running=float("nan"))),
+                                         chat=ideal_chat)
+    s["nonfinite_waiting"] = dict(health=(200, dict(healthy, requests_waiting=float("-inf"))),
+                                  chat=ideal_chat)
+    # A /v1/systemone probability that is NaN or -Infinity still passes, and the
+    # sanity detail carries Python's str(float): p=nan, p=-inf.
+    s["laya_nan_probability"] = dict(engine={"kind": "laya"},
+                                     health=(200, {"ok": True, "loaded": ["en"], "device": "cuda:0"}),
+                                     systemone=(200, {"answers": {"intent": {"choice": "billing",
+                                                                             "probabilities": {"billing": float("nan")}}},
+                                                      "model": MODEL}))
+    s["laya_neg_inf_probability"] = dict(engine={"kind": "laya"},
+                                         health=(200, {"ok": True, "loaded": ["en"], "device": "cuda:0"}),
+                                         systemone=(200, {"answers": {"intent": {"choice": "billing",
+                                                                                 "probabilities": {"billing": float("-inf")}}},
+                                                          "model": MODEL}))
+    # A NaN model is wrong on both sides (the model is truthy and differs from
+    # the registry string); the report renders it nan.
+    s["laya_nan_model"] = dict(engine={"kind": "laya"},
+                               health=(200, {"ok": True, "loaded": ["en"], "device": "cuda:0"}),
+                               systemone=(200, {"answers": {"intent": {"choice": "billing",
+                                                                       "probabilities": {"billing": 0.87}}},
+                                                "model": float("nan")}))
+    # model_ids carrying a bare NaN token: Python dies uncaught before any
+    # report (TypeError on the join for the list, not subscriptable for the
+    # scalar); the Rust port reproduces the fatal exit.
+    s["model_ids_nan_list"] = dict(health=(200, dict(healthy, model_ids=[float("nan")])),
+                                   chat=lambda b: (200, OK_CHAT))
+    s["model_ids_nan_scalar"] = dict(health=(200, dict(healthy, model_ids=float("nan"))),
+                                     chat=lambda b: (200, OK_CHAT))
+    # A healthy engine whose chat reply carries an ignored NaN field: accepting
+    # the token must not disturb the happy path (verdict ok, exit 0).
+    s["chat_ignored_nan"] = dict(health=(200, healthy),
+                                 chat=lambda b: (200, {"choices": [{"message": {"content": "42"}}],
+                                                       "usage": {"prompt_tokens": float("nan")}}))
     return s
 
 
@@ -332,11 +376,21 @@ def run(cmd, args, cwd=None):
     return p.returncode, p.stdout, p.stderr
 
 
+def rendered_model(value):
+    """Python's --json carries a bare NaN/Infinity token for a non-finite
+    model, which json.loads turns into float nan/inf; the Rust port cannot
+    serialize a non-finite number, so it carries the rendered text ("nan").
+    Compare the model the way both tables print it."""
+    if isinstance(value, float) and not math.isfinite(value):
+        return str(value)
+    return value
+
+
 def comparable(e):
     sanity = e.get("sanity", {})
     return {
         "engine": e.get("engine"), "url": e.get("url"), "host": e.get("host"), "kind": e.get("kind"),
-        "verdict": e.get("verdict"), "status": e.get("status"), "model": e.get("model"),
+        "verdict": e.get("verdict"), "status": e.get("status"), "model": rendered_model(e.get("model")),
         "version": e.get("version"), "load": e.get("load"),
         "sanity_result": sanity.get("result"), "sanity_latency_is_null": sanity.get("latency_s") is None,
         "features": e.get("features"), "problem_count": len(e.get("problems", [])),
