@@ -1,0 +1,15 @@
+[package]
+name = "fleet-mcp"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "MCP stdio server exposing the fleet registry check as a tool"
+publish = false
+
+[[bin]]
+name = "fleet-mcp"
+path = "src/main.rs"
+
+[dependencies]
+fleet-check-rs = { path = "../fleet-check-rs" }
+serde_json.workspace = true

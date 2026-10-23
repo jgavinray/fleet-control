@@ -3,7 +3,7 @@
 #
 [workspace]
 resolver = "2"
-members = ["crates/fleet-core", "crates/fleet-check-rs"]
+members = ["crates/fleet-core", "crates/fleet-check-rs", "crates/fleet-mcp"]
 
 [workspace.package]
 edition = "2021"

@@ -11,7 +11,9 @@
 #      engine order, the 14-field comparable projection and whole feature
 #      objects; any stderr on a normal run fails
 #   3. changes nothing outside crates/ (checked against the merge-base),
-#      apart from the root .gitignore, which the ignore check below depends on
+#      apart from the root .gitignore, which the ignore check below depends on,
+#      and the two workspace manifests (Cargo.toml, Cargo.lock), which adding a
+#      workspace member requires
 #
 # No live engine is ever contacted: the parity harness serves mock engines on
 # loopback only. The Python tool stays ground truth and is never modified.
@@ -45,14 +47,14 @@ for cand in "$ROOT/target/release/fleet-check-rs" "$ROOT/$BINCRATE/target/releas
 done
 [ -n "$BIN" ] || { echo "GATE FAIL: no binary at target/release/fleet-check-rs (build failed or the bin is not named fleet-check-rs)" >&2; exit 1; }
 
-for p in fleet-core fleet-check-rs; do
+for p in fleet-core fleet-check-rs fleet-mcp; do
   t=$(cargo test -p "$p" 2>&1); st=$?
   echo "$t" | grep -E "^test result|error" | head -8
   [ "$st" -eq 0 ] || bad "cargo test -p $p failed"
   passed=$(echo "$t" | awk '/^test result:/ {p += $4} END {print p + 0}')
   [ "$passed" -ge 8 ] || bad "only $passed tests in $p; at least 8 are required"
 done
-( cd "$ROOT" && cargo clippy -p fleet-core -p fleet-check-rs --all-targets --quiet -- -D warnings 2>&1 | tail -20; exit "${PIPESTATUS[0]}" ) || bad "clippy -D warnings failed"
+( cd "$ROOT" && cargo clippy -p fleet-core -p fleet-check-rs -p fleet-mcp --all-targets --quiet -- -D warnings 2>&1 | tail -20; exit "${PIPESTATUS[0]}" ) || bad "clippy -D warnings failed"
 ( cd "$ROOT" && cargo fmt --check >/dev/null 2>&1 ) || bad "cargo fmt --check failed"
 
 python3 -I "$HERE/parity.py" "$ROOT/check/fleet_check.py" "$BIN" || bad "parity with the Python fleet-check failed"
@@ -69,13 +71,14 @@ done
 # Cargo.toml/Cargo.lock) as out-of-scope changes of the branch under test.
 base=$(git merge-base HEAD main 2>/dev/null || git merge-base HEAD origin/main 2>/dev/null || git rev-parse HEAD)
 # Scope: committed or uncommitted work against the merge-base. Only the new
-# crates may change; the Python tool, fleet.toml and everything else stay as
-# they are. The gate itself and parity.py live under crates/ and are allowed,
-# as is the root .gitignore the ignore check above depends on.
+# crates may change, plus the two workspace manifests that a new member
+# requires; the Python tool, fleet.toml and everything else stay as they are.
+# The gate itself and parity.py live under crates/ and are allowed, as is the
+# root .gitignore the ignore check above depends on.
 changed=$( { git diff --name-only "$base"; git ls-files --others --exclude-standard; } | sort -u)
 for f in $changed; do
   case "$f" in
-    crates/*|.gitignore) ;;  # .gitignore: the ignore check above depends on it
+    crates/*|.gitignore|Cargo.toml|Cargo.lock) ;;  # manifests: adding a workspace member needs them
     *) bad "file outside crates/ changed: $f" ;;
   esac
 done
