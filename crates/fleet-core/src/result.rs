@@ -7,6 +7,8 @@ use std::fmt;
 
 use serde_json::{json, Map, Value};
 
+use crate::jsonpy;
+
 /// Engine state. Rank order: down (3) > wrong (2) > slow (1) > ok / skipped-busy (0).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Status {
@@ -117,10 +119,20 @@ impl Feature {
     }
 
     pub fn to_json(&self) -> Value {
+        // Python's `json.dumps` writes a float nan/inf as the bare token, which
+        // is not valid JSON; the Python tool's own --json output would then be
+        // unreadable by the harness. Such a registry value is untestable
+        // end-to-end, so a sentinel renders as the token in a JSON string here.
+        let expected = match self.expected.as_ref().and_then(Value::as_str) {
+            Some(jsonpy::NAN_TOK) => Value::String("NaN".to_string()),
+            Some(jsonpy::INF_TOK) => Value::String("Infinity".to_string()),
+            Some(jsonpy::NEGINF_TOK) => Value::String("-Infinity".to_string()),
+            _ => self.expected.clone().unwrap_or(Value::Null),
+        };
         json!({
             "result": self.result,
             "reason": self.reason,
-            "expected": self.expected,
+            "expected": expected,
             "drift": self.drift,
         })
     }

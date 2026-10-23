@@ -16,6 +16,8 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{Map, Value};
 
+use crate::jsonpy;
+
 /// Default health path for engines that do not name one. Python defaults
 /// lfm2d engines to "/v1/models" instead; `EngineConfig::health_path` knows
 /// the difference.
@@ -303,9 +305,12 @@ fn to_json_value(value: &toml::Value) -> Value {
     match value {
         toml::Value::String(s) => Value::String(s.clone()),
         toml::Value::Integer(i) => Value::Number((*i).into()),
-        toml::Value::Float(f) => serde_json::Number::from_f64(*f)
-            .map(Value::Number)
-            .unwrap_or(Value::Null),
+        toml::Value::Float(f) => match serde_json::Number::from_f64(*f) {
+            Some(number) => Value::Number(number),
+            None if f.is_nan() => Value::String(jsonpy::NAN_TOK.to_string()),
+            None if *f == f64::INFINITY => Value::String(jsonpy::INF_TOK.to_string()),
+            None => Value::String(jsonpy::NEGINF_TOK.to_string()),
+        },
         toml::Value::Boolean(b) => Value::Bool(*b),
         toml::Value::Datetime(d) => Value::String(d.to_string()),
         toml::Value::Array(a) => Value::Array(a.iter().map(to_json_value).collect()),
@@ -623,6 +628,36 @@ mod tests {
         assert_eq!(engine.expected("logprobs"), Some(&json!(1)));
         assert_eq!(engine.expected("guided_choice"), Some(&json!("no")));
         assert_eq!(engine.expected("absent"), None);
+    }
+
+    #[test]
+    fn nonfinite_expected_features_are_raw_and_drift() {
+        use crate::result::Feature;
+
+        let registry = parse_registry(
+            "[engines.e]\nurl = \"u\"\nmodel = \"m\"\n\
+             [engines.e.expected_features]\nlogprobs = nan\nprompt_logprobs = inf\n",
+        )
+        .expect("tomllib accepts nan/inf floats");
+        let engine = registry.engine("e").expect("engine");
+        let nan = engine.expected("logprobs").expect("logprobs expectation");
+        let inf = engine
+            .expected("prompt_logprobs")
+            .expect("prompt_logprobs expectation");
+        assert_eq!(nan, &json!(jsonpy::NAN_TOK));
+        assert_eq!(inf, &json!(jsonpy::INF_TOK));
+        assert!(jsonpy::is_nonfinite(nan));
+
+        let feature = Feature::record("yes", "returned", Some(nan));
+        assert!(feature.drift, "a float nan never equals the result string");
+        // Python's json.dumps would emit a bare NaN here (invalid JSON), which
+        // the parity harness could not load. The Rust report uses the token as
+        // a string, so this fixture is deliberately not byte-comparable.
+        assert_eq!(feature.to_json()["expected"], json!("NaN"));
+
+        let inf_feature = Feature::record("yes", "returned", Some(inf));
+        assert!(inf_feature.drift);
+        assert_eq!(inf_feature.to_json()["expected"], json!("Infinity"));
     }
 
     #[test]

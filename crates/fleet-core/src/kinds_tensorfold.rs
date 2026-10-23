@@ -10,11 +10,12 @@
 use serde_json::Value;
 
 use crate::http::{Client, Resp};
+use crate::jsonpy;
 use crate::opts::Opts;
 use crate::probes::{self, chat_body, chat_text, record_feature, BgSender, SANITY_PROMPT};
 use crate::registry::EngineConfig;
 use crate::result::{round3, CheckResult, Sanity, Status};
-use crate::{describe_load, health_up, py_str, py_truthy, sanity_answer_ok};
+use crate::{describe_load, health_up, py_truthy, sanity_answer_ok};
 
 /// The four features a TensorFold engine is probed for, in Python's order.
 pub const FEATURES: [&str; 4] = [
@@ -72,6 +73,11 @@ pub fn check_tensorfold(res: &mut CheckResult, cfg: &EngineConfig, c: &mut Clien
     // Python: `res.model = ids[0] if ids else ""`. A string is a sequence of
     // characters, an array's first element is kept raw, and a dict or a
     // number raises uncaught (KeyError/TypeError) before anything is reported.
+    // A sentinel is a bare float token, so indexing it raises the float error.
+    if jsonpy::is_nonfinite(&ids) {
+        res.fatal = Some("TypeError: 'float' object is not subscriptable".to_string());
+        return;
+    }
     let model_value = match &ids {
         Value::String(s) => {
             Value::String(s.chars().next().map(|c| c.to_string()).unwrap_or_default())
@@ -94,7 +100,7 @@ pub fn check_tensorfold(res: &mut CheckResult, cfg: &EngineConfig, c: &mut Clien
         }
         Value::Null => Value::String(String::new()),
     };
-    res.model = py_str(&model_value);
+    res.model = jsonpy::number_text(&model_value);
 
     // Python: `model not in ids` on the raw value (a substring test for a
     // string, raw equality for an array).
@@ -118,7 +124,7 @@ pub fn check_tensorfold(res: &mut CheckResult, cfg: &EngineConfig, c: &mut Clien
                 let mut parts = Vec::with_capacity(items.len());
                 for (index, item) in items.iter().enumerate() {
                     match item {
-                        Value::String(s) => parts.push(s.clone()),
+                        Value::String(s) if !jsonpy::is_nonfinite(item) => parts.push(s.clone()),
                         other => {
                             res.fatal = Some(format!(
                                 "TypeError: sequence item {index}: expected str instance, {} found",
@@ -289,6 +295,9 @@ fn py_type_name(v: &Value) -> &'static str {
         Value::Bool(_) => "bool",
         Value::Number(n) if n.is_i64() || n.is_u64() => "int",
         Value::Number(_) => "float",
+        Value::String(s) if s == jsonpy::NAN_TOK => "float",
+        Value::String(s) if s == jsonpy::INF_TOK => "float",
+        Value::String(s) if s == jsonpy::NEGINF_TOK => "float",
         Value::String(_) => "str",
         Value::Array(_) => "list",
         Value::Object(_) => "dict",
@@ -368,6 +377,16 @@ mod tests {
             self
         }
 
+        /// A health body that is not valid JSON to serde_json (it carries a
+        /// bare `NaN`/`Infinity`), so it is written as raw text.
+        fn health_raw(mut self, status: u16, body: &str) -> Self {
+            self.health = Reply {
+                status,
+                body: body.to_string(),
+            };
+            self
+        }
+
         fn models(mut self, status: u16, body: Value) -> Self {
             self.models = Some(Reply::json(status, body));
             self
@@ -430,6 +449,13 @@ mod tests {
 
     fn ok_chat() -> Reply {
         Reply::json(200, chat("42"))
+    }
+
+    fn raw_reply(status: u16, body: &str) -> Reply {
+        Reply {
+            status,
+            body: body.to_string(),
+        }
     }
 
     fn ideal_chat(body: &Value) -> Reply {
@@ -897,6 +923,74 @@ mod tests {
         );
         assert_eq!(requests, 1, "the crash happens before sanity");
         assert!(res.problems.is_empty(), "Python dies building the message");
+    }
+
+    #[test]
+    fn model_ids_nan_mismatches_then_dies_on_join() {
+        let sc = scenario()
+            .health_raw(200, r#"{"ok": true, "model_ids": [NaN]}"#)
+            .chat(|_| ok_chat());
+        let (res, requests) = run(sc, &opts(true));
+        assert_eq!(res.model, "nan", "the raw first id renders via str()");
+        assert_eq!(
+            res.fatal.as_deref(),
+            Some("TypeError: sequence item 0: expected str instance, float found")
+        );
+        assert_eq!(requests, 1, "the crash happens before sanity");
+        assert!(res.problems.is_empty(), "Python dies building the message");
+    }
+
+    #[test]
+    fn model_ids_infinity_mismatches_then_dies_on_join() {
+        let sc = scenario()
+            .health_raw(200, r#"{"ok": true, "model_ids": [Infinity]}"#)
+            .chat(|_| ok_chat());
+        let (res, requests) = run(sc, &opts(true));
+        assert_eq!(res.model, "inf");
+        assert_eq!(
+            res.fatal.as_deref(),
+            Some("TypeError: sequence item 0: expected str instance, float found")
+        );
+        assert_eq!(requests, 1);
+    }
+
+    #[test]
+    fn scalar_nan_model_ids_is_a_float_subscript_error() {
+        let sc = scenario()
+            .health_raw(200, r#"{"ok": true, "model_ids": NaN}"#)
+            .chat(|_| ok_chat());
+        let (res, requests) = run(sc, &opts(true));
+        assert_eq!(
+            res.fatal.as_deref(),
+            Some("TypeError: 'float' object is not subscriptable")
+        );
+        assert_eq!(requests, 1);
+    }
+
+    #[test]
+    fn nan_in_an_ignored_reply_field_keeps_the_healthy_verdict() {
+        let (baseline, _) = run(
+            scenario().health(200, healthy()).chat(|_| ok_chat()),
+            &opts(true),
+        );
+        let nan_reply = r#"{"choices": [{"message": {"content": "42"}}],
+            "usage": {"prompt_tokens": NaN, "completion_tokens": Infinity}}"#;
+        let (with_nan, requests) = run(
+            scenario()
+                .health(200, healthy())
+                .chat(move |_| raw_reply(200, nan_reply)),
+            &opts(true),
+        );
+
+        assert_eq!(with_nan.status, Status::Ok);
+        assert_eq!(with_nan.sanity.result, "pass");
+        assert_eq!(with_nan.sanity.detail, "answered '42'");
+        assert_eq!(with_nan.verdict(), baseline.verdict());
+        assert_eq!(
+            exit_code(std::slice::from_ref(&with_nan)),
+            exit_code(std::slice::from_ref(&baseline))
+        );
+        assert_eq!(with_nan.requests, requests);
     }
 
     #[test]

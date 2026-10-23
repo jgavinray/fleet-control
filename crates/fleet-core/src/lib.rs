@@ -7,6 +7,7 @@
 
 pub mod check_engine;
 pub mod http;
+pub mod jsonpy;
 pub mod kinds_rest;
 pub mod kinds_tensorfold;
 pub mod opts;
@@ -142,8 +143,8 @@ pub fn describe_load(h: &Value) -> (String, f64) {
         (
             format!(
                 "busy ({} running, {} waiting)",
-                py_str(&running),
-                py_str(&waiting)
+                jsonpy::number_text(&running),
+                jsonpy::number_text(&waiting)
             ),
             counter_value(&running) + counter_value(&waiting),
         )
@@ -176,6 +177,9 @@ fn counter_value(value: &Value) -> f64 {
     match value {
         Value::Bool(true) => 1.0,
         Value::Bool(false) => 0.0,
+        Value::String(s) if s == jsonpy::NAN_TOK => f64::NAN,
+        Value::String(s) if s == jsonpy::INF_TOK => f64::INFINITY,
+        Value::String(s) if s == jsonpy::NEGINF_TOK => f64::NEG_INFINITY,
         other => other.as_f64().unwrap_or(0.0),
     }
 }
@@ -209,6 +213,36 @@ mod tests {
         assert_eq!(py_repr_str("a'b\"c"), "'a\\'b\"c'");
         assert_eq!(py_repr_str("line\nbreak\t"), "'line\\nbreak\\t'");
         assert_eq!(py_repr_str(""), "''");
+    }
+
+    #[test]
+    fn describe_load_renders_nonfinite_counters_like_python() {
+        let nan = json!({
+            "requests_running": jsonpy::NAN_TOK,
+            "requests_waiting": 0,
+        });
+        let (text, in_flight) = describe_load(&nan);
+        assert_eq!(text, "busy (nan running, 0 waiting)");
+        assert!(in_flight.is_nan(), "NaN is truthy, like Python's float nan");
+
+        let negative = json!({
+            "requests_running": jsonpy::NEGINF_TOK,
+            "requests_waiting": 0,
+        });
+        let (text, in_flight) = describe_load(&negative);
+        assert_eq!(text, "busy (-inf running, 0 waiting)");
+        assert_eq!(in_flight, f64::NEG_INFINITY);
+
+        let waiting = json!({
+            "requests_running": 0,
+            "requests_waiting": jsonpy::INF_TOK,
+        });
+        let (text, in_flight) = describe_load(&waiting);
+        assert_eq!(text, "busy (0 running, inf waiting)");
+        assert_eq!(in_flight, f64::INFINITY);
+
+        assert!(py_truthy(&json!(jsonpy::NAN_TOK)));
+        assert!(py_truthy(&json!(jsonpy::NEGINF_TOK)));
     }
 
     #[test]

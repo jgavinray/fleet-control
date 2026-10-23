@@ -6,6 +6,7 @@
 
 use serde_json::{json, Value};
 
+use crate::jsonpy;
 use crate::opts::Opts;
 use crate::registry::EngineConfig;
 use crate::result::{round3, CheckResult, Status};
@@ -125,7 +126,7 @@ fn check_systemone(res: &mut CheckResult, r: &Resp, model: &str, qid: &str, want
         .cloned()
         .unwrap_or(Value::String(String::new()));
     let probs = answer.get("probabilities").and_then(Value::as_object);
-    res.model = py_str(&got_model);
+    res.model = jsonpy::number_text(&got_model);
 
     if choice.as_str() == Some(want) {
         let extra = match probs.and_then(|probs| probs.get(want)) {
@@ -134,15 +135,18 @@ fn check_systemone(res: &mut CheckResult, r: &Resp, model: &str, qid: &str, want
                 .map(|p| format!(" (p={p:.2})"))
                 .unwrap_or_default(),
             Some(Value::Bool(p)) => format!(" (p={:.2})", if *p { 1.0 } else { 0.0 }),
+            Some(p) if jsonpy::is_nonfinite(p) => {
+                format!(" (p={})", jsonpy::number_text(p))
+            }
             _ => String::new(),
         };
         res.sanity.result = "pass".to_string();
-        res.sanity.detail = format!("chose {}{extra}", py_repr(choice));
+        res.sanity.detail = format!("chose {}{extra}", render_value(choice));
     } else {
         res.sanity.result = "fail".to_string();
         res.sanity.detail = format!(
             "chose {}, expected {}",
-            py_repr(choice),
+            render_value(choice),
             py_repr(&Value::String(want.to_string()))
         );
         res.fail(Status::Wrong, format!("sanity: {}", res.sanity.detail));
@@ -153,8 +157,21 @@ fn check_systemone(res: &mut CheckResult, r: &Resp, model: &str, qid: &str, want
     if py_truthy(&got_model) && got_model != Value::String(model.to_string()) {
         res.fail(
             Status::Wrong,
-            format!("model is {}, registry expects {model}", py_str(&got_model)),
+            format!(
+                "model is {}, registry expects {model}",
+                jsonpy::number_text(&got_model)
+            ),
         );
+    }
+}
+
+/// Python's `repr()` for a choice: a sentinel is the float it stands for, so
+/// `repr(float("nan"))` renders bare (`nan`), not as a quoted string.
+fn render_value(value: &Value) -> String {
+    if jsonpy::is_nonfinite(value) {
+        jsonpy::number_text(value)
+    } else {
+        py_repr(value)
     }
 }
 
@@ -315,5 +332,74 @@ fn join_loaded(value: &Value) -> String {
             .join(","),
         Value::Object(map) => map.keys().cloned().collect::<Vec<_>>().join(","),
         other => py_str(other),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::result::CheckResult;
+
+    fn resp(text: &str) -> Resp {
+        Resp::new(200, text.to_string(), 0.0, "")
+    }
+
+    fn result() -> CheckResult {
+        CheckResult::new("e", "http://x", "h", "laya")
+    }
+
+    #[test]
+    fn systemone_nan_probability_and_model_render_like_python() {
+        let mut res = result();
+        check_systemone(
+            &mut res,
+            &resp(
+                r#"{"answers": {"intent": {"choice": "billing",
+                    "probabilities": {"billing": NaN}}}, "model": NaN}"#,
+            ),
+            "M-1",
+            "intent",
+            "billing",
+        );
+        assert_eq!(res.sanity.result, "pass");
+        assert_eq!(res.sanity.detail, "chose 'billing' (p=nan)");
+        assert_eq!(res.model, "nan");
+        assert_eq!(res.status, Status::Wrong);
+        assert_eq!(res.problems, vec!["model is nan, registry expects M-1"]);
+    }
+
+    #[test]
+    fn systemone_infinite_probability_renders_with_its_sign() {
+        for (token, rendered) in [("Infinity", "inf"), ("-Infinity", "-inf")] {
+            let mut res = result();
+            let body = r#"{"answers": {"intent": {"choice": "billing",
+                "probabilities": {"billing": TOKEN}}}, "model": "M-1"}"#
+                .replace("TOKEN", token);
+            check_systemone(&mut res, &resp(&body), "M-1", "intent", "billing");
+            assert_eq!(res.sanity.result, "pass", "{token}");
+            assert_eq!(
+                res.sanity.detail,
+                format!("chose 'billing' (p={rendered})"),
+                "{token}"
+            );
+            assert_eq!(res.status, Status::Ok, "{token}");
+            assert!(res.problems.is_empty(), "{token}");
+        }
+    }
+
+    #[test]
+    fn systemone_nan_choice_renders_as_a_bare_float_repr() {
+        let mut res = result();
+        check_systemone(
+            &mut res,
+            &resp(r#"{"answers": {"intent": {"choice": NaN}}, "model": "M-1"}"#),
+            "M-1",
+            "intent",
+            "billing",
+        );
+        assert_eq!(res.sanity.result, "fail");
+        assert_eq!(res.sanity.detail, "chose nan, expected 'billing'");
+        assert_eq!(res.status, Status::Wrong);
+        assert_eq!(res.problems, vec!["sanity: chose nan, expected 'billing'"]);
     }
 }

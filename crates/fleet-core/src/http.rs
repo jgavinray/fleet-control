@@ -12,6 +12,8 @@ use std::time::{Duration, Instant};
 use serde_json::Value;
 use ureq::Agent;
 
+use crate::jsonpy;
+
 /// Python's socket timeout is stored as int64 nanoseconds, so anything past
 /// this many seconds raises OverflowError inside `urlopen`.
 const MAX_TIMEOUT_SECS: f64 = 9_223_372_036.854_776;
@@ -33,7 +35,7 @@ impl Resp {
         let json = if text.is_empty() {
             None
         } else {
-            serde_json::from_str(&text).ok()
+            jsonpy::parse(&text)
         };
         Self {
             status,
@@ -125,6 +127,7 @@ impl Client {
     pub fn new(base: &str, timeout: f64) -> Self {
         let agent: Agent = Agent::config_builder()
             .http_status_as_error(false)
+            .user_agent("Python-urllib/3.14")
             .timeout_global(Some(duration(timeout)))
             .build()
             .into();
@@ -435,6 +438,65 @@ mod tests {
         assert_eq!(resp.status, 0);
         assert_eq!(resp.error, "ValueError: Invalid value NaN (not a number)");
         assert_eq!(client.count, 1);
+    }
+
+    /// Serve one request and hand the captured request head back to the test.
+    fn serve_once_capturing(response: Vec<u8>) -> (String, std::sync::mpsc::Receiver<String>) {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind a free port");
+        let address = listener.local_addr().expect("local addr");
+        let (sender, receiver) = std::sync::mpsc::channel();
+        thread::spawn(move || {
+            let Ok((stream, _)) = listener.accept() else {
+                return;
+            };
+            let mut reader = BufReader::new(stream.try_clone().expect("clone the stream"));
+            let mut head = String::new();
+            loop {
+                let mut line = String::new();
+                if reader.read_line(&mut line).unwrap_or(0) == 0 {
+                    break;
+                }
+                head.push_str(&line);
+                if line == "\r\n" || line == "\n" {
+                    break;
+                }
+            }
+            sender.send(head).ok();
+            let mut stream = stream;
+            stream.write_all(&response).ok();
+            stream.flush().ok();
+        });
+        (format!("http://{address}"), receiver)
+    }
+
+    #[test]
+    fn resp_parses_python_nonfinite_tokens() {
+        let resp = Resp::new(
+            200,
+            "{\"a\": NaN, \"b\": [Infinity, -Infinity]}".to_string(),
+            0.0,
+            "",
+        );
+        let json = resp.json.as_ref().expect("Python accepts these tokens");
+        assert_eq!(json["a"], json!(jsonpy::NAN_TOK));
+        assert_eq!(json["b"], json!([jsonpy::INF_TOK, jsonpy::NEGINF_TOK]));
+        assert!(jsonpy::is_nonfinite(&json["a"]));
+    }
+
+    #[test]
+    fn requests_identify_as_python_urllib() {
+        let (base, headers) = serve_once_capturing(
+            b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}".to_vec(),
+        );
+        let mut client = Client::new(&base, 5.0);
+        let resp = client.get("/health");
+        assert_eq!(resp.status, 200);
+        let head = headers.recv().expect("the request head");
+        assert!(
+            head.to_ascii_lowercase()
+                .contains("user-agent: python-urllib/3.14"),
+            "{head}"
+        );
     }
 
     #[test]
