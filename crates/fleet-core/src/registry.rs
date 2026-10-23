@@ -523,14 +523,20 @@ pub fn registry_path(explicit: Option<&Path>) -> PathBuf {
 }
 
 /// Python's `DEFAULT_REGISTRY` is `<repo root>/fleet.toml`, found relative to
-/// the script. The Rust binary lives under `target/`, so walk up from the
-/// executable (then from the working directory) to the first `fleet.toml`.
+/// the script's `os.path.realpath`, so invoking `~/.local/bin/fleet-check` (a
+/// symlink into the checkout) still finds the repo. Mirror that: resolve the
+/// executable's symlink chain before walking up, then fall back to the working
+/// directory.
 pub fn default_registry_path() -> PathBuf {
-    let starts = std::env::current_exe()
-        .ok()
-        .and_then(|exe| exe.parent().map(Path::to_path_buf))
-        .into_iter()
-        .chain(std::env::current_dir().ok());
+    let exe_dir = std::env::current_exe().ok().and_then(|exe| {
+        let resolved = exe.canonicalize().unwrap_or(exe);
+        resolved.parent().map(Path::to_path_buf)
+    });
+    let starts = exe_dir.into_iter().chain(std::env::current_dir().ok());
+    search_registry(starts)
+}
+
+fn search_registry(starts: impl Iterator<Item = PathBuf>) -> PathBuf {
     for start in starts {
         for dir in start.ancestors() {
             let candidate = dir.join(REGISTRY_FILE);
@@ -560,6 +566,27 @@ mod tests {
         let path = std::env::temp_dir().join(format!("fleet-core-{}-{name}", std::process::id()));
         std::fs::write(&path, contents).expect("write temp file");
         path
+    }
+
+    #[test]
+    fn registry_search_finds_the_repo_through_a_symlinked_launcher() {
+        let tmp = std::env::temp_dir().join(format!("fleet-core-symlink-{}", std::process::id()));
+        let real = tmp.join("checkout/bin");
+        std::fs::create_dir_all(&real).unwrap();
+        std::fs::write(tmp.join("checkout/fleet.toml"), "[hosts]\n").unwrap();
+        let link = tmp.join("launcher");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        // Without canonicalizing (the old behavior) no fleet.toml sits above
+        // the link, so the search falls back to the bare relative name.
+        let raw = search_registry([link.clone()].into_iter());
+        assert_eq!(raw, PathBuf::from(REGISTRY_FILE));
+        // Canonicalized first — what default_registry_path now does — it is found.
+        let found = search_registry([link.canonicalize().unwrap()].into_iter());
+        assert_eq!(
+            found,
+            tmp.canonicalize().unwrap().join("checkout/fleet.toml")
+        );
+        std::fs::remove_dir_all(&tmp).unwrap();
     }
 
     #[test]
