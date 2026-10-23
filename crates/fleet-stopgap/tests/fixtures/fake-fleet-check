@@ -1,0 +1,53 @@
+#!/bin/sh
+# Stand-in for fleet-check (ported from stopgap/tests/fake-fleet-check).
+# Each call takes the next line of $FAKE_SEQ. A line is comma-separated
+# engine=status pairs ("glm=down,deepseek=ok"), or CRASH (prints garbage,
+# exits 3), or EMPTY (no output, exit 1). Records its arguments in
+# $FAKE_SEQ.args so the tests can check what was asked.
+set -u
+seq="$FAKE_SEQ"
+counter="$seq.n"
+n=0
+[ -f "$counter" ] && n=$(cat "$counter")
+lines=$(grep -v '^[[:space:]]*$' "$seq")
+count=$(printf '%s\n' "$lines" | grep -c . || true)
+if [ "$count" = 0 ]; then
+    echo "RuntimeError: sequence exhausted" >&2
+    exit 1
+fi
+idx=$((n + 1))
+[ "$idx" -gt "$count" ] && idx=$count
+line=$(printf '%s\n' "$lines" | sed -n "${idx}p")
+echo $((n + 1)) >"$counter"
+printf '%s\n' "$*" >>"$seq.args"
+
+if [ "$line" = "CRASH" ]; then
+    echo "Traceback: boom"
+    exit 3
+fi
+if [ "$line" = "EMPTY" ]; then
+    exit 1
+fi
+
+engines=""
+first=1
+rc=0
+saved_ifs=$IFS
+IFS=,
+for pair in $line; do
+    IFS=$saved_ifs
+    name=${pair%%=*}
+    status=${pair#*=}
+    [ "$status" != "ok" ] && rc=1
+    if [ "$first" = 1 ]; then first=0; else engines="$engines, "; fi
+    if [ "$status" = "ok" ]; then
+        probs="[]"
+    else
+        probs="[\"health: $status password=hunter2hunter2\"]"
+    fi
+    engines="$engines{\"engine\": \"$name\", \"status\": \"$status\", \"problems\": $probs}"
+    IFS=,
+done
+IFS=$saved_ifs
+printf '{"engines": [%s]}\n' "$engines"
+exit $rc
