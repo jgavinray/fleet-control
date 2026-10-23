@@ -5,8 +5,8 @@
 #   1. builds the workspace in release mode and passes `cargo test` (at least
 #      8 tests per crate), `cargo clippy --all-targets -- -D warnings` and
 #      `cargo fmt --check`
-#   2. replays the mock-engine scenarios recorded from the Python fleet-check
-#      on 2026-10-22 (crates/parity/golden) against the Rust binary
+#   2. replays the mock-engine scenarios recorded from the pre-port
+#      fleet-check on 2026-10-22 (crates/parity/golden) against the Rust binary
 #      (crates/parity, binary parity-rs): --quick --json and full mode,
 #      tensorfold plus the laya, lfm2d and jev-glm kinds, exit code, engine
 #      order, the 14-field comparable projection and whole feature objects;
@@ -17,8 +17,8 @@
 #      workspace member requires
 #
 # No live engine is ever contacted: the parity harness serves mock engines on
-# loopback only. The golden files recorded from the Python tool on 2026-10-22
-# are ground truth; no Python runs at gate time.
+# loopback only. The golden files, recorded from the pre-port tool on
+# 2026-10-22 and committed under crates/parity/golden, are ground truth.
 set -u
 fail=0
 bad() { echo "GATE FAIL: $*" >&2; fail=1; }
@@ -77,7 +77,7 @@ done
 base=$(git merge-base HEAD main 2>/dev/null || git merge-base HEAD origin/main 2>/dev/null || git rev-parse HEAD)
 # Scope: committed or uncommitted work against the merge-base. Only the new
 # crates may change, plus the two workspace manifests that a new member
-# requires; the Python tool, fleet.toml and everything else stay as they are.
+# requires; fleet.toml and everything else stay as they are.
 # The gate itself and the parity harness live under crates/ and are allowed, as
 # is the root .gitignore the ignore check above depends on.
 changed=$( { git diff --name-only "$base"; git ls-files --others --exclude-standard; } | sort -u)

@@ -1,9 +1,8 @@
 # fleet-control: the fleet registry, fleet-check and the fleet-worker agent
 
 This repository was split out of `mission-control` (its former `fleet/`
-directory, with history) on 10/22/2026. `lib/` is the shared Python library
-(`fleetlib`) and `agents/` holds the `fleet-worker` agent definition and its
-installer; both have their own README.
+directory, with history) on 10/22/2026. `agents/` holds the `fleet-worker`
+agent definition and its installer; it has its own README.
 
 ## Install
 
@@ -21,8 +20,7 @@ override (see below). Resolution order: `--registry`, then `$FLEET_REGISTRY`,
 then the binary's own checkout, then that config home, then the working
 directory.
 
-Tests: `check/test.sh` and `lib/test.sh` (Python 3.11 or newer, standard
-library only); `crates/gate.sh` for the Rust workspace.
+Tests: `crates/gate.sh` for the Rust workspace.
 
 ## The registry and fleet-check
 
@@ -48,8 +46,7 @@ fleet-check --force-shared  # also test a shared engine that is busy (see below)
 ```
 
 `~/.local/bin/fleet-check` is a symlink to `target/release/fleet-check-rs`
-in this repo (the Rust tool; the Python launcher at `check/fleet-check` is
-the parity reference). It needs nothing else at run time.
+in this repo (the Rust tool). It needs nothing else at run time.
 
 ### Reading the output
 
@@ -145,7 +142,7 @@ address = "192.0.2.11"
 ```
 
 A URL whose host is `hyper01` or `hyper01.<tailnet>.ts.net` is rewritten to
-that address before it is used, by both `fleet-check` and `fleetlib`. Hosts
+that address before it is used, by `fleet-check`. Hosts
 with no entry keep their Tailscale name. If the file is missing, nothing
 changes; if it is not valid TOML it is ignored with a warning. To check the
 Tailscale route on purpose, run with `FLEET_LOCAL=/dev/null`.
@@ -156,11 +153,11 @@ Two sections: `[engines.*]` and `[hosts.*]`. The comments in the file say what
 each field means. Rules:
 
 - Keys are sorted and there are no timestamps, so a diff shows only real
-  changes. A test checks this.
+  changes.
 - Base URLs with Tailscale names (FQDNs) only. No keys and no IP addresses
-  of any kind; the repo is public. `check/test.sh` fails if a tracked file
-  holds a private (RFC 1918) or Tailscale (CGNAT, 100.64/10) address, or the name
-  of another person who uses a host.
+  of any kind; the repo is public. Never commit a private (RFC 1918) or
+  Tailscale (CGNAT, 100.64/10) address, or the name of another person who
+  uses a host.
 - It records facts that were checked. `notes` is for the warnings people keep
   re-learning (for example "NEVER use the old `dsv41-exl3.service`").
 
@@ -192,7 +189,6 @@ each field means. Rules:
    a feature you have no opinion on; it is measured and shown but never
    flagged). Run it again; it should exit 0.
 4. If the engine is shared with other people, add `shared = true`.
-5. Run `check/test.sh`. It checks the file is well formed.
 
 Kinds:
 
@@ -203,34 +199,20 @@ Kinds:
 | `lfm2d` | `health_path` (`/v1/models`); optional `exporter_url` | `read = "specs"` or `"spans"` |
 | `jev-glm` | `/health` and `/ready` | one `/v1/systemone` decision |
 
-A new kind needs a new function in `check/fleet_check.py` and an entry
-in `CHECKS`.
-
-## Testing fleet-check itself
-
-```
-check/test.sh             # unit tests against stub HTTP servers; about a second
-check/test.sh --selftest  # also breaks a copy of the code on purpose and
-                                # requires the tests to go red
-```
-
-The tests cover a healthy engine, a down engine (exit 1), feature drift
-(exit 2), a wrong answer (exit 1), the shared-engine skip, each engine kind,
-and the shape of `fleet.toml`. They do **not** touch the real fleet; the
-real check is running `fleet-check`.
+A new kind needs a new check function in `crates/fleet-core` and an arm in
+the kind match in `check_engine.rs`.
 
 ## The Rust workspace (fleet-core and fleet-check-rs)
 
 The repo root is also a cargo workspace: `crates/fleet-core` is the library
 (the registry loader with the local LAN override, the counting HTTP client,
 the result and verdict types, the per-kind engine checks and the feature
-probes), and `crates/fleet-check-rs` is the same tool as `check/fleet_check.py`
-as a compiled binary.
+probes), and `crates/fleet-check-rs` is the `fleet-check` command as a
+compiled binary.
 
-**Status.** The port is additive and is not installed anywhere. The `ln -sfn`
-install above still points at the Python launcher; the Python tool remains the
-operating tool until the owner rules on a cutover. Nothing in `stopgap/` or
-`agents/` changes.
+**Status.** The Rust binary is the operating tool: the `ln -sfn` install
+above puts it at `~/.local/bin/fleet-check`, and the stopgap watcher runs it
+every 2 minutes.
 
 **Build, test, gate.** From the repo root:
 
@@ -241,25 +223,26 @@ bash crates/gate.sh
 ```
 
 The gate builds in release mode, requires at least 8 tests per crate, runs
-`cargo clippy --all-targets -- -D warnings` and `cargo fmt --check`, then runs
-`crates/parity.py`: a 154-comparison mock-engine harness that runs the Python
-and Rust tools side by side on loopback and compares exit codes, engine order
+`cargo clippy --all-targets -- -D warnings` and `cargo fmt --check`, then
+replays the recorded mock-engine goldens (`crates/parity/golden`, binary
+`parity-rs`) against the Rust binary: 172 comparisons over `--quick --json`
+and full mode, comparing exit codes, engine order
 and the comparable JSON fields (any stderr on a normal run fails). No live
 engine is contacted.
 
-**Parity.** The Rust tool matches the Python on every scenario in
-`crates/parity.py`. Message wording may differ; counts, fields and exit codes
+**Parity.** The Rust tool matches the verdicts recorded from the Python
+reference on 2026-10-22 on every mock-engine scenario in
+`crates/parity/golden`. Message wording may differ; counts, fields and exit codes
 do not. Replies containing `NaN`, `Infinity` or `-Infinity` tokens parse
 exactly as Python's `json.loads` accepts them, and request bodies identify as
 Python-urllib/3.14.
 
-**Known divergences from the Python tool.**
+**Known divergences from the Python reference.**
 
 - The default registry search has one extra step: after the binary's own
   checkout, the Rust tool also consults `~/.config/fleet-control/fleet.toml`
-  (the config home for packaged installs); Python only searches from its
-  script and the working directory. Point the Python tool at such a
-  registry with `$FLEET_REGISTRY`.
+  (the config home for packaged installs); Python only searched from its
+  script and the working directory.
 - A timeout applies to the whole request in the Rust tool (ureq's global
   deadline) rather than to each socket operation as in Python: a response
   that trickles in indefinitely in small chunks times out in Rust where
@@ -273,8 +256,7 @@ Python-urllib/3.14.
   a traceback; the exit code matches.
 
 **Requirements.** A Rust toolchain (the port is built with 1.92); `serde_json`,
-`toml` and `ureq` are fetched from crates.io on the first build. The Python
-side stays Python 3.11+ standard-library only.
+`toml` and `ureq` are fetched from crates.io on the first build.
 
 ## Caveats
 
@@ -288,9 +270,10 @@ side stays Python 3.11+ standard-library only.
 
 ## Stopgap uptime alert (Mac)
 
-`stopgap/` is a small, disposable watcher so the owner is told when an engine is
-down, without having to ask. Step 0 of `fleet-uptime-design.md`; the planned
-`fleet-watch` daemon replaces it.
+The stopgap is a small, disposable watcher so the owner is told when an engine
+is down, without having to ask. Step 0 of `fleet-uptime-design.md`; the
+planned `fleet-watch` daemon replaces it. The watcher is the Rust
+`fleet-stopgap` binary (`crates/fleet-stopgap`).
 
 **What it does.** A LaunchAgent runs `~/.local/bin/fleet-check --quick --json`
 every 2 minutes on the Mac. `--quick` skips the feature probes, so it stays
@@ -315,7 +298,7 @@ gentle on hyper03 and on Qwen, which serves one request at a time. Each run:
 | History, one JSON line per run | `~/.local/state/fleet-stopgap/history.jsonl` |
 | Per-engine window and open alerts | `~/.local/state/fleet-stopgap/state.json` |
 | launchd output and errors | `~/.local/state/fleet-stopgap/launchd.log` |
-| Installed copy of the script | `~/.local/libexec/fleet-stopgap/fleet-stopgap.py` |
+| The watcher binary | `target/release/fleet-stopgap` (from `crates/fleet-stopgap`) |
 | The LaunchAgent | `~/Library/LaunchAgents/com.jgavinray.fleet-stopgap.plist` |
 
 **Was it up overnight?** Each history line has `ts`, `result` (`ok`, `fail` or
@@ -330,21 +313,13 @@ jq -c 'select(.ts > "2026-10-21T22:00" and .result != "ok") | {ts, result, engin
 
 About 720 lines a day, roughly 300 KB.
 
-**Install, stop, restart.**
+**Stop and restart.**
 
 ```
-stopgap/install.sh            # install or reinstall, and start (also runs once at once)
-stopgap/install.sh uninstall  # stop and remove; history is kept
 launchctl bootout gui/$(id -u)/com.jgavinray.fleet-stopgap      # stop now (it comes back at next login)
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.jgavinray.fleet-stopgap.plist   # start again
 launchctl print gui/$(id -u)/com.jgavinray.fleet-stopgap        # is it loaded, when did it last run
 ```
-
-**Tests.** `stopgap/test.sh` fakes `fleet-check` and the notifier (no engine is
-touched) and checks: no alert on 1 or 2 failures in 5, an alert at 3, no repeat
-alert while it continues, exactly one alert for a flapping engine, one recovery
-note, nothing on a `fleet-check` crash. `stopgap/test.sh --selftest` also breaks
-copies of the script six ways and requires the tests to go red each time.
 
 **Known gaps.** It only runs while the Mac is awake and online, and it sees what
 `fleet-check` sees: it cannot tell a driver or disk cause from a crash. The first
